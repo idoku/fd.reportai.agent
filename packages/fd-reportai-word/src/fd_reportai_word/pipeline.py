@@ -69,6 +69,9 @@ class WordPipeline:
         for renderer in self.renderers:
             renderer.render(context)
 
+        if isinstance(context.rendered_output, dict):
+            context.section_outputs = list(context.rendered_output.get("sections", []))
+
         return context
 
     def _normalize_elements(

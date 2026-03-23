@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from ..application import DefaultAssembler, DefaultComposer
 from ..context import WordContext
 
 
@@ -13,84 +14,32 @@ class BaseComposer(ABC):
 
 class NoopComposer(BaseComposer):
     def compose(self, context: WordContext) -> None:
-        sections = self._compose_blocks(context.execution_blocks, context)
+        if context.framework is None or context.plan is None or context.data_context is None:
+            context.composed_document = None
+            context.block_results = []
+            return
 
-        context.section_outputs = sections
-        context.composed_document = {
-            "title": context.framework.title if context.framework else None,
-            "sections": sections,
-            "blocked_items": context.blocked_items,
-        }
+        composer = DefaultComposer()
+        block_results = {}
+        flat_results = []
+        for section in self._walk_sections(context.planned_sections):
+            for task in section.tasks:
+                result = composer.compose(task, context.data_context)
+                block_results[(task.section_key, task.definition.key)] = result
+                flat_results.append(result)
 
-    def _compose_blocks(
-        self,
-        blocks: list[dict[str, object]],
-        context: WordContext,
-    ) -> list[dict[str, object]]:
-        return [self._compose_block(block, context) for block in blocks]
+        context.block_results = flat_results
+        context.composed_document = DefaultAssembler().assemble(
+            title=context.framework.title,
+            template_key=context.plan.template_key,
+            template_version=context.plan.template_version,
+            sections=context.planned_sections,
+            block_results=block_results,
+            blocked_items=list(context.blocked_items),
+            metadata=dict(context.metadata),
+        )
 
-    def _compose_block(
-        self,
-        block: dict[str, object],
-        context: WordContext,
-    ) -> dict[str, object]:
-        children = self._compose_blocks(list(block.get("children", [])), context)
-        content = self._render_block_content(block, context)
-
-        return {
-            "key": block["section_key"],
-            "title": block["title"],
-            "block_mode": block["block_mode"],
-            "template": block.get("template"),
-            "prompt": block.get("prompt"),
-            "few_shots": block.get("few_shots", []),
-            "elements": list(block.get("elements", [])),
-            "missing_required_elements": list(block.get("missing_required_elements", [])),
-            "content": content,
-            "children": children,
-            "options": dict(block.get("options", {})),
-        }
-
-    def _render_block_content(
-        self,
-        block: dict[str, object],
-        context: WordContext,
-    ) -> object:
-        variables = {
-            element["key"]: element.get("value")
-            for element in block.get("elements", [])
-            if element.get("value") is not None
-        }
-        mode = block["block_mode"]
-
-        if mode == "template_fill":
-            template = block.get("template")
-            if isinstance(template, str):
-                return template.format(**variables)
-            return variables
-
-        if mode == "prompt_generation":
-            prompt_payload = self._build_prompt_payload(block, variables)
-            prompt_generator = context.metadata.get("prompt_generator")
-            if callable(prompt_generator):
-                return prompt_generator(prompt_payload)
-            return prompt_payload
-
-        raise ValueError(f"Unsupported block mode: {mode}")
-
-    def _build_prompt_payload(
-        self,
-        block: dict[str, object],
-        variables: dict[str, object],
-    ) -> dict[str, object]:
-        prompt = block.get("prompt")
-        formatted_prompt = prompt.format(**variables) if isinstance(prompt, str) else None
-        return {
-            "mode": "prompt_generation",
-            "section_key": block["section_key"],
-            "title": block["title"],
-            "template": block.get("template"),
-            "few_shots": list(block.get("few_shots", [])),
-            "prompt": formatted_prompt,
-            "variables": variables,
-        }
+    def _walk_sections(self, sections):
+        for section in sections:
+            yield section
+            yield from self._walk_sections(section.children)

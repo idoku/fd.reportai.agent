@@ -1,4 +1,5 @@
 from .settings import (
+    DEFAULT_RULES_DIR,
     ElementMap,
     ElementValue,
     ReportSectionConfig,
@@ -8,6 +9,7 @@ from .settings import (
 )
 
 __all__ = [
+    "DEFAULT_RULES_DIR",
     "ElementMap",
     "ElementValue",
     "SectionBuildMode",

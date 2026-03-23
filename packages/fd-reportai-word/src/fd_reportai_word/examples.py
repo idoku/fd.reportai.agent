@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .config import ReportSectionConfig, SectionElementConfig, WordPipelineConfig
+from .config import DEFAULT_RULES_DIR, ReportSectionConfig, SectionElementConfig, WordPipelineConfig
 
 
 def valuation_report_v1() -> WordPipelineConfig:
@@ -8,12 +8,13 @@ def valuation_report_v1() -> WordPipelineConfig:
         name="valuation_report_v1",
         version="v1",
         title="Valuation Report",
+        rules_dir=DEFAULT_RULES_DIR,
         sections=[
             ReportSectionConfig(
                 key="summary",
                 title="Summary",
                 block_mode="template_fill",
-                template="Project: {project_name}\nValuation conclusion: {valuation_conclusion}",
+                template_file="valuation/summary.md",
                 elements=[
                     SectionElementConfig(key="project_name"),
                     SectionElementConfig(key="valuation_conclusion"),
@@ -28,6 +29,16 @@ def valuation_report_v1() -> WordPipelineConfig:
                 elements=[
                     SectionElementConfig(key="income"),
                     SectionElementConfig(key="ebitda"),
+                ],
+            ),
+            ReportSectionConfig(
+                key="analysis",
+                title="Analysis",
+                block_mode="prompt_generation",
+                prompt_file="valuation/analysis.prompt.md",
+                elements=[
+                    SectionElementConfig(key="project_name"),
+                    SectionElementConfig(key="valuation_conclusion"),
                 ],
             ),
             ReportSectionConfig(

@@ -10,6 +10,7 @@ class DefaultRenderer:
             "template_key": document.template_key,
             "template_version": document.template_version,
             "sections": [self._render_section(section) for section in document.sections],
+            "markdown": self._render_markdown(document),
             "blocked_items": list(document.blocked_items),
             "metadata": dict(document.metadata),
         }
@@ -51,3 +52,63 @@ class DefaultRenderer:
             "children": [self._render_section(child) for child in section.children],
             "options": dict(section.options),
         }
+
+    def _render_markdown(self, document: ReportDocument) -> str:
+        parts = [f"# {document.title}"]
+        for section in document.sections:
+            section_markdown = self._render_markdown_section(section, level=2)
+            if section_markdown:
+                parts.append(section_markdown)
+        return "\n\n".join(parts).strip()
+
+    def _render_markdown_section(self, section: ReportSectionDocument, level: int) -> str:
+        heading = f"{'#' * max(level, 1)} {section.title}"
+        parts = [heading]
+
+        for block in section.blocks:
+            content = self._render_markdown_content(block.content)
+            if content:
+                parts.append(content)
+
+        for child in section.children:
+            child_markdown = self._render_markdown_section(child, level + 1)
+            if child_markdown:
+                parts.append(child_markdown)
+
+        return "\n\n".join(parts).strip()
+
+    def _render_markdown_content(self, content: object) -> str:
+        if isinstance(content, dict):
+            content_type = content.get("type")
+            if content_type == "rich_text":
+                return str(content.get("text", "")).strip()
+            if content_type == "table":
+                return self._render_markdown_table(content)
+            if content_type == "image_group":
+                items = content.get("items", [])
+                return "\n".join(f"- {item}" for item in items) if isinstance(items, list) else str(items)
+            return str(content.get("content", "")).strip()
+        return str(content).strip()
+
+    def _render_markdown_table(self, content: dict[str, object]) -> str:
+        rows = content.get("rows", [])
+        if not isinstance(rows, list) or not rows:
+            return ""
+
+        if all(isinstance(row, dict) for row in rows):
+            headers = list(rows[0].keys())
+            header_row = "| " + " | ".join(str(header) for header in headers) + " |"
+            separator_row = "| " + " | ".join("---" for _ in headers) + " |"
+            data_rows = [
+                "| " + " | ".join(str(row.get(header, "")) for header in headers) + " |"
+                for row in rows
+            ]
+            return "\n".join([header_row, separator_row, *data_rows])
+
+        data_rows = []
+        for row in rows:
+            if isinstance(row, (list, tuple)):
+                data_rows.append("| " + " | ".join(str(cell) for cell in row) + " |")
+            else:
+                data_rows.append(f"- {row}")
+        return "\n".join(data_rows)

@@ -69,11 +69,7 @@ def build_common_kwargs(extra: dict[str, Any] | None = None) -> dict[str, Any]:
         "max_tokens": env_int("MAX_TOKENS", 512),
         "timeout": env_int("MODEL_TIMEOUT", 120),
         "streaming": env_bool("STREAMING", True),
-        "model_kwargs": {
-            "top_p": env_float("TOP_P", 0.9),
-            "num_ctx": env_int("NUM_CTX", 16384),
-            "num_predict": env_int("NUM_PREDICT", 1024),
-        },
+        "top_p": env_float("TOP_P", 0.9),
     }
     if extra:
         kwargs.update(extra)

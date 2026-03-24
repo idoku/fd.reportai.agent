@@ -7,11 +7,9 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage
 
-from .config import DEFAULT_PROMPTS_DIR, ElementValue
-from .context import WordContext
-from .converters import LandValuationCoverConverter
+from .config import DEFAULT_PROMPTS_DIR, DEFAULT_TEMPLATES_DIR
+from .land_blocks import LAND_BLOCKS, TemplateBlockConfig
 from .llm import LLMLocator, SupportsInvoke
-from .pipeline import WordPipeline
 
 
 class _SafeFormatDict(dict):
@@ -20,79 +18,133 @@ class _SafeFormatDict(dict):
 
 
 @dataclass(slots=True)
-class PromptTask:
-    target_key: str
-    prompt_file: str | None = None
-    prompt_template: str | None = None
-    provider: str | None = None
+class BlockExecutionResult:
+    block_key: str
+    title: str
+    selected_input: dict[str, Any]
+    generated_fields: dict[str, Any]
+    rendered_content: str
+    prompt_preview: str
+    provider: str
     model: str | None = None
-    enabled: bool = True
-    metadata: dict[str, Any] = field(default_factory=dict)
 
 
-class PromptFieldGenerator:
+@dataclass(slots=True)
+class LandReportArtifacts:
+    input_payload: dict[str, Any]
+    block_results: list[BlockExecutionResult]
+    markdown: str
+    output_path: Path | None = None
+
+
+class LandReportRunner:
     def __init__(
         self,
         *,
-        prompts_dir: Path = DEFAULT_PROMPTS_DIR,
         locator: LLMLocator | None = None,
         llm: SupportsInvoke | None = None,
+        prompts_dir: Path = DEFAULT_PROMPTS_DIR,
+        templates_dir: Path = DEFAULT_TEMPLATES_DIR,
     ) -> None:
-        self.prompts_dir = prompts_dir
         self.locator = locator
         self.llm = llm
+        self.prompts_dir = prompts_dir
+        self.templates_dir = templates_dir
 
-    def generate(
+    def run_from_file(
         self,
-        tasks: list[PromptTask],
-        variables: dict[str, Any],
-    ) -> tuple[dict[str, str], list[dict[str, Any]]]:
-        generated: dict[str, str] = {}
-        traces: list[dict[str, Any]] = []
+        input_path: str | Path,
+        *,
+        block_keys: list[str] | None = None,
+        output_path: str | Path | None = None,
+    ) -> LandReportArtifacts:
+        payload = json.loads(Path(input_path).read_text(encoding="utf-8"))
+        selected_keys = block_keys or ["cover"]
 
-        for task in tasks:
-            if not task.enabled:
-                continue
+        block_results = [self._run_block(LAND_BLOCKS[key], payload) for key in selected_keys]
+        markdown = self._assemble_markdown(block_results)
 
-            prompt_template = self._load_prompt_template(task)
-            rendered_prompt = prompt_template.format_map(_SafeFormatDict(variables))
-            llm = self._resolve_llm(task)
-            if llm is None:
-                raise RuntimeError("LLM client is required for enabled prompt tasks.")
+        destination: Path | None = None
+        if output_path is not None:
+            destination = Path(output_path)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(markdown, encoding="utf-8")
 
-            response = llm.invoke(
-                [HumanMessage(content=rendered_prompt)],
-                metadata={"target_key": task.target_key, **task.metadata},
-            )
-            content = self._extract_content(response)
-            generated[task.target_key] = content
-            variables[task.target_key] = content
-            traces.append(
+        return LandReportArtifacts(
+            input_payload=payload,
+            block_results=block_results,
+            markdown=markdown,
+            output_path=destination,
+        )
+
+    def _run_block(self, block: TemplateBlockConfig, payload: dict[str, Any]) -> BlockExecutionResult:
+        selected_input = self._select_input(payload, block.input_keys)
+        prompt = self._build_prompt(block, selected_input)
+        llm = self._resolve_llm(block)
+        if llm is None:
+            raise RuntimeError(f"No LLM available for block {block.key}.")
+
+        response = llm.invoke([HumanMessage(content=prompt)])
+        content = self._extract_content(response)
+        generated_fields = self._parse_json_object(content)
+        missing = [field for field in block.output_fields if field not in generated_fields]
+        if missing:
+            raise ValueError(f"Block {block.key} missing generated fields: {missing}")
+
+        rendered_content = self._render_template(block, generated_fields)
+        provider = block.provider or (self.locator.provider if self.locator is not None else "custom")
+        model = getattr(response, "response_metadata", {}).get("model_name")
+        return BlockExecutionResult(
+            block_key=block.key,
+            title=block.title,
+            selected_input=selected_input,
+            generated_fields=generated_fields,
+            rendered_content=rendered_content,
+            prompt_preview=prompt[:400],
+            provider=provider,
+            model=model,
+        )
+
+    def _select_input(self, payload: dict[str, Any], input_keys: list[str]) -> dict[str, Any]:
+        return {key: payload[key] for key in input_keys if key in payload}
+
+    def _build_prompt(self, block: TemplateBlockConfig, selected_input: dict[str, Any]) -> str:
+        if block.prompt_file is None:
+            raise ValueError(f"Block {block.key} is missing prompt_file.")
+        prompt_template = (self.prompts_dir / block.prompt_file).read_text(encoding="utf-8")
+        return prompt_template.format_map(
+            _SafeFormatDict(
                 {
-                    "target_key": task.target_key,
-                    "model": getattr(response, "response_metadata", {}).get("model_name", task.model),
-                    "prompt_preview": rendered_prompt[:400],
+                    "输入数据JSON": json.dumps(selected_input, ensure_ascii=False, indent=2),
+                    "输出字段JSON": json.dumps(block.output_fields, ensure_ascii=False),
+                    "模板名称": block.template_file or "",
+                    "区块标题": block.title,
                 }
             )
+        )
 
-        return generated, traces
-
-    def _load_prompt_template(self, task: PromptTask) -> str:
-        if task.prompt_template is not None:
-            return task.prompt_template
-        if task.prompt_file is None:
-            raise ValueError(f"Prompt task {task.target_key} requires prompt_file or prompt_template.")
-        return (self.prompts_dir / task.prompt_file).read_text(encoding="utf-8")
-
-    def _resolve_llm(self, task: PromptTask) -> SupportsInvoke | None:
+    def _resolve_llm(self, block: TemplateBlockConfig) -> SupportsInvoke | None:
         if self.locator is not None:
-            task_locator = replace(
+            block_locator = replace(
                 self.locator,
-                provider=task.provider or self.locator.provider,
-                model=task.model or self.locator.model,
+                provider=block.provider or self.locator.provider,
+                model=block.model or self.locator.model,
             )
-            return task_locator.get_llm()
+            return block_locator.get_llm()
         return self.llm
+
+    def _render_template(self, block: TemplateBlockConfig, fields: dict[str, Any]) -> str:
+        if block.template_file is None:
+            raise ValueError(f"Block {block.key} is missing template_file.")
+        template = (self.templates_dir / block.template_file).read_text(encoding="utf-8")
+        return template.format_map(_SafeFormatDict(fields)).strip()
+
+    def _assemble_markdown(self, block_results: list[BlockExecutionResult]) -> str:
+        parts = ["# 土地估价报告"]
+        for block in block_results:
+            parts.append(f"## {block.title}")
+            parts.append(block.rendered_content)
+        return "\n\n".join(part.strip() for part in parts if part and part.strip())
 
     def _extract_content(self, response: Any) -> str:
         content = getattr(response, "content", response)
@@ -112,88 +164,13 @@ class PromptFieldGenerator:
             return "\n".join(part for part in parts if part).strip()
         return str(content)
 
-
-@dataclass(slots=True)
-class LandReportArtifacts:
-    input_payload: dict[str, Any]
-    generated_fields: dict[str, str]
-    prompt_traces: list[dict[str, Any]]
-    context: WordContext
-    output_path: Path | None = None
-
-
-class LandReportRunner:
-    def __init__(
-        self,
-        *,
-        locator: LLMLocator | None = None,
-        llm: SupportsInvoke | None = None,
-    ) -> None:
-        self.locator = locator
-        self.llm = llm
-        self.pipeline = WordPipeline(converters=[LandValuationCoverConverter()])
-
-    def run_from_file(
-        self,
-        input_path: str | Path,
-        *,
-        output_path: str | Path | None = None,
-    ) -> LandReportArtifacts:
-        input_file = Path(input_path)
-        payload = json.loads(input_file.read_text(encoding="utf-8"))
-
-        cover_inputs = dict(payload.get("封面", {}))
-        summary_inputs = dict(payload.get("摘要", {}))
-        shared_inputs = dict(payload.get("共享输入", {}))
-
-        merged_variables = {**shared_inputs, **cover_inputs, **summary_inputs}
-        prompt_tasks = [
-            PromptTask(
-                target_key=str(item["目标字段"]),
-                prompt_file=item.get("提示词文件"),
-                prompt_template=item.get("提示词模板"),
-                provider=item.get("提供方"),
-                model=item.get("模型"),
-                enabled=bool(item.get("启用", True)),
-                metadata={"task_name": item.get("任务名称", item.get("目标字段", ""))},
-            )
-            for item in payload.get("提示词任务", [])
-        ]
-
-        generated_fields, prompt_traces = PromptFieldGenerator(
-            locator=self.locator,
-            llm=self.llm,
-        ).generate(prompt_tasks, merged_variables)
-        summary_inputs.update(generated_fields)
-
-        context = WordContext(
-            metadata={
-                "data_snapshot_id": str(payload.get("数据快照ID", input_file.stem)),
-                "prompt_traces": prompt_traces,
-            },
-            elements={
-                key: ElementValue(value=value)
-                for key, value in {**shared_inputs, **summary_inputs}.items()
-            },
-            detections=[
-                {
-                    "key": "land_valuation_cover",
-                    "payload": cover_inputs,
-                }
-            ],
-        )
-        result = self.pipeline.run(context=context)
-
-        destination: Path | None = None
-        if output_path is not None:
-            destination = Path(output_path)
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_text(result.rendered_output["markdown"], encoding="utf-8")
-
-        return LandReportArtifacts(
-            input_payload=payload,
-            generated_fields=generated_fields,
-            prompt_traces=prompt_traces,
-            context=result,
-            output_path=destination,
-        )
+    def _parse_json_object(self, text: str) -> dict[str, Any]:
+        candidate = text.strip()
+        if candidate.startswith("```"):
+            candidate = candidate.split("\n", 1)[1]
+            candidate = candidate.rsplit("```", 1)[0].strip()
+        start = candidate.find("{")
+        end = candidate.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            raise ValueError(f"LLM did not return a JSON object: {text}")
+        return json.loads(candidate[start : end + 1])

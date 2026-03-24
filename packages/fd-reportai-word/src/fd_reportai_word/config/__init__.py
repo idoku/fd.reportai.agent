@@ -1,5 +1,7 @@
 from .settings import (
     DEFAULT_RULES_DIR,
+    DEFAULT_PROMPTS_DIR,
+    DEFAULT_TEMPLATES_DIR,
     ElementMap,
     ElementValue,
     ReportSectionConfig,
@@ -10,6 +12,8 @@ from .settings import (
 
 __all__ = [
     "DEFAULT_RULES_DIR",
+    "DEFAULT_PROMPTS_DIR",
+    "DEFAULT_TEMPLATES_DIR",
     "ElementMap",
     "ElementValue",
     "SectionBuildMode",

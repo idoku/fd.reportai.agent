@@ -11,6 +11,7 @@ from .converters import BaseConverter, NoopConverter
 from .detectors import BaseDetector, NoopDetector
 from .planner import BasePlanner, NoopPlanner
 from .renderer import BaseRenderer, NoopRenderer
+from .rules.default_rulesets import apply_default_ruleset
 from .validator import BaseValidator, NoopValidator
 
 
@@ -46,12 +47,14 @@ class WordPipeline:
     ) -> WordContext:
         if context is None:
             if framework is None:
-                raise ValueError("framework is required when context is not provided.")
+                framework = apply_default_ruleset(WordContext()).framework
             context = self.create_context(
                 framework=framework,
                 elements=elements,
                 metadata=metadata,
             )
+        else:
+            apply_default_ruleset(context)
 
         for detector in self.detectors:
             detector.detect(context)

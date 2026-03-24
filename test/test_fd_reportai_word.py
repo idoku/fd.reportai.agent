@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -8,6 +9,10 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_SRC = ROOT / "packages" / "fd-reportai-word" / "src"
+INPUTS_DIR = ROOT / "inputs"
+OUTPUTS_DIR = INPUTS_DIR / "_outputs"
+LAND_SUMMARY_INPUT_PATH = INPUTS_DIR / "land_summary_input.json"
+LAND_SUMMARY_OUTPUT_PATH = OUTPUTS_DIR / "land_summary.md"
 
 if str(PACKAGE_SRC) not in sys.path:
     sys.path.insert(0, str(PACKAGE_SRC))
@@ -21,6 +26,10 @@ from fd_reportai_word.config import (  # noqa: E402
 )
 from fd_reportai_word.exporters import PandocDocxExporter  # noqa: E402
 from fd_reportai_word.pipeline import WordPipeline  # noqa: E402
+
+
+def load_json(path: Path) -> dict[str, object]:
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 class TestFdReportAiWord(unittest.TestCase):
@@ -127,6 +136,61 @@ class TestFdReportAiWord(unittest.TestCase):
         self.assertEqual(analysis_content["mode"], "prompt_generation")
         self.assertIn("Alpha Project", analysis_content["prompt"])
         self.assertIn("Market value remains stable.", analysis_content["prompt"])
+
+    def test_pipeline_reads_land_summary_inputs_from_path(self) -> None:
+        summary_input = load_json(LAND_SUMMARY_INPUT_PATH)
+        framework = WordPipelineConfig(
+            name="land_summary_v1",
+            title="土地估价报告",
+            version="v1",
+            rules_dir=DEFAULT_RULES_DIR,
+            sections=[
+                ReportSectionConfig(
+                    key="summary",
+                    title="摘要",
+                    block_mode="template_fill",
+                    template_file="land/land_summary.md",
+                    elements=[
+                        SectionElementConfig(key="估价项目名称"),
+                        SectionElementConfig(key="委托估价方"),
+                        SectionElementConfig(key="联系人"),
+                        SectionElementConfig(key="联系方式"),
+                        SectionElementConfig(key="委托方与权利人关系"),
+                        SectionElementConfig(key="估价目的"),
+                        SectionElementConfig(key="估价期日"),
+                        SectionElementConfig(key="估价日期"),
+                        SectionElementConfig(key="地价定义"),
+                        SectionElementConfig(key="估价结果说明"),
+                        SectionElementConfig(key="估价结果明细"),
+                        SectionElementConfig(key="估价结果合计"),
+                        SectionElementConfig(key="土地估价师签字表"),
+                        SectionElementConfig(key="估价机构法定代表人签字", required=False, default_value=""),
+                        SectionElementConfig(key="估价机构"),
+                        SectionElementConfig(key="摘要出具日期"),
+                        SectionElementConfig(key="结果一览表机构信息"),
+                        SectionElementConfig(key="结果一览表目的与权性质"),
+                        SectionElementConfig(key="结果一览表表格"),
+                        SectionElementConfig(key="结果一览表备注"),
+                        SectionElementConfig(key="限定条件"),
+                        SectionElementConfig(key="其他说明事项"),
+                    ],
+                )
+            ],
+        )
+
+        context = WordPipeline().run(framework=framework, elements=summary_input)
+        rendered = context.composed_document["sections"][0]["content"]
+        OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+        LAND_SUMMARY_OUTPUT_PATH.write_text(context.rendered_output["markdown"], encoding="utf-8")
+
+        self.assertIn("第一部分  摘  要", rendered)
+        self.assertIn("长沙银行股份有限公司委托评估的常德市德源投资集团有限公司拟抵押贷款涉及的位于常德市经济技术开发区尚德路以东、民建路以北及常德经济技术开发区谢家湖的4宗国有出让建设用地", rendered)
+        self.assertIn("七、估价结果", rendered)
+        self.assertIn("估价对象1：", rendered)
+        self.assertIn("表1-1  土地估价结果一览表", rendered)
+        self.assertIn("| 估价对象 | 不动产权利人 | 坐落 |", rendered)
+        self.assertIn("二、其他需要说明的事项：", rendered)
+        self.assertTrue(LAND_SUMMARY_OUTPUT_PATH.exists())
 
     @patch("fd_reportai_word.exporters.pandoc.subprocess.run")
     def test_pandoc_exporter_builds_docx_command(self, mock_run) -> None:

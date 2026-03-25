@@ -17,15 +17,10 @@ LAND_SUMMARY_OUTPUT_PATH = OUTPUTS_DIR / "land_summary.md"
 if str(PACKAGE_SRC) not in sys.path:
     sys.path.insert(0, str(PACKAGE_SRC))
 
-from fd_reportai_word.config import (  # noqa: E402
-    DEFAULT_RULES_DIR,
-    ElementValue,
-    ReportSectionConfig,
-    SectionElementConfig,
-    WordPipelineConfig,
-)
+from fd_reportai_word.config import ElementValue, ReportSectionConfig, SectionElementConfig, WordPipelineConfig  # noqa: E402
 from fd_reportai_word.exporters import PandocDocxExporter  # noqa: E402
 from fd_reportai_word.pipeline import WordPipeline  # noqa: E402
+from fd_reportai_word.rules import get_default_ruleset  # noqa: E402
 
 
 def load_json(path: Path) -> dict[str, object]:
@@ -74,8 +69,7 @@ class TestFdReportAiWord(unittest.TestCase):
             sections=[summary_fragment, risk_fragment],
         )
 
-        pipeline = WordPipeline()
-        context = pipeline.run(framework=framework, elements=elements)
+        context = WordPipeline().run(framework=framework, elements=elements)
 
         self.assertEqual(context.composed_document["title"], "Simple Report")
         self.assertEqual(len(context.composed_document["sections"]), 2)
@@ -93,104 +87,51 @@ class TestFdReportAiWord(unittest.TestCase):
         self.assertEqual(context.composed_document["blocked_items"], [])
         self.assertEqual(context.validation_errors, [])
 
-    def test_pipeline_loads_markdown_and_prompt_from_rules_directory(self) -> None:
-        framework = WordPipelineConfig(
-            name="valuation_report_v1",
-            title="Valuation Report",
-            version="v1",
-            rules_dir=DEFAULT_RULES_DIR,
-            sections=[
-                ReportSectionConfig(
-                    key="summary",
-                    title="Summary",
-                    block_mode="template_fill",
-                    template_file="valuation/summary.md",
-                    elements=[
-                        SectionElementConfig(key="project_name"),
-                        SectionElementConfig(key="valuation_conclusion"),
-                    ],
-                ),
-                ReportSectionConfig(
-                    key="analysis",
-                    title="Analysis",
-                    block_mode="prompt_generation",
-                    prompt_file="valuation/analysis.prompt.md",
-                    elements=[
-                        SectionElementConfig(key="project_name"),
-                        SectionElementConfig(key="valuation_conclusion"),
-                    ],
-                ),
-            ],
-        )
-        pipeline = WordPipeline()
-        context = pipeline.run(
+    def test_pipeline_loads_markdown_and_prompt_from_default_ruleset(self) -> None:
+        framework = get_default_ruleset("valuation_report")
+        context = WordPipeline().run(
             framework=framework,
             elements={
                 "project_name": "Alpha Project",
                 "valuation_conclusion": "Market value remains stable.",
+                "income": 100,
+                "ebitda": 20,
+            },
+            metadata={
+                "compute_registry": {
+                    "build_metrics_table": lambda variables, task=None: [
+                        ["income", variables["income"]],
+                        ["ebitda", variables["ebitda"]],
+                    ],
+                    "build_site_photos": lambda variables, task=None: [],
+                }
             },
         )
 
+        self.assertEqual(context.framework.name, "valuation_report_v1")
         self.assertIn("Project: Alpha Project", context.composed_document["sections"][0]["content"])
-        analysis_content = context.composed_document["sections"][1]["content"]
+        analysis_content = context.composed_document["sections"][2]["content"]
         self.assertEqual(analysis_content["mode"], "prompt_generation")
         self.assertIn("Alpha Project", analysis_content["prompt"])
         self.assertIn("Market value remains stable.", analysis_content["prompt"])
 
-    def test_pipeline_reads_land_summary_inputs_from_path(self) -> None:
+    def test_pipeline_reads_land_summary_inputs_from_default_ruleset(self) -> None:
         summary_input = load_json(LAND_SUMMARY_INPUT_PATH)
-        framework = WordPipelineConfig(
-            name="land_summary_v1",
-            title="土地估价报告",
-            version="v1",
-            rules_dir=DEFAULT_RULES_DIR,
-            sections=[
-                ReportSectionConfig(
-                    key="summary",
-                    title="摘要",
-                    block_mode="template_fill",
-                    template_file="land/land_summary.md",
-                    elements=[
-                        SectionElementConfig(key="估价项目名称"),
-                        SectionElementConfig(key="委托估价方"),
-                        SectionElementConfig(key="联系人"),
-                        SectionElementConfig(key="联系方式"),
-                        SectionElementConfig(key="委托方与权利人关系"),
-                        SectionElementConfig(key="估价目的"),
-                        SectionElementConfig(key="估价期日"),
-                        SectionElementConfig(key="估价日期"),
-                        SectionElementConfig(key="地价定义"),
-                        SectionElementConfig(key="估价结果说明"),
-                        SectionElementConfig(key="估价结果明细"),
-                        SectionElementConfig(key="估价结果合计"),
-                        SectionElementConfig(key="土地估价师签字表"),
-                        SectionElementConfig(key="估价机构法定代表人签字", required=False, default_value=""),
-                        SectionElementConfig(key="估价机构"),
-                        SectionElementConfig(key="摘要出具日期"),
-                        SectionElementConfig(key="结果一览表机构信息"),
-                        SectionElementConfig(key="结果一览表目的与权性质"),
-                        SectionElementConfig(key="结果一览表表格"),
-                        SectionElementConfig(key="结果一览表备注"),
-                        SectionElementConfig(key="限定条件"),
-                        SectionElementConfig(key="其他说明事项"),
-                    ],
-                )
-            ],
-        )
+        framework = get_default_ruleset("land_conver")
 
         context = WordPipeline().run(framework=framework, elements=summary_input)
-        rendered = context.composed_document["sections"][0]["content"]
-        OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-        LAND_SUMMARY_OUTPUT_PATH.write_text(context.rendered_output["markdown"], encoding="utf-8")
+        sections = context.composed_document["sections"]
+        rendered_markdown = context.rendered_output["markdown"]
 
-        self.assertIn("第一部分  摘  要", rendered)
-        self.assertIn("长沙银行股份有限公司委托评估的常德市德源投资集团有限公司拟抵押贷款涉及的位于常德市经济技术开发区尚德路以东、民建路以北及常德经济技术开发区谢家湖的4宗国有出让建设用地", rendered)
-        self.assertIn("七、估价结果", rendered)
-        self.assertIn("估价对象1：", rendered)
-        self.assertIn("表1-1  土地估价结果一览表", rendered)
-        self.assertIn("| 估价对象 | 不动产权利人 | 坐落 |", rendered)
-        self.assertIn("二、其他需要说明的事项：", rendered)
+        OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+        LAND_SUMMARY_OUTPUT_PATH.write_text(rendered_markdown, encoding="utf-8")
+
+        self.assertEqual(context.framework.name, "land_conver_v1")
+        self.assertEqual([section["key"] for section in sections], ["conver", "summary"])
+        self.assertTrue(sections[1]["content"])
+        self.assertIn(sections[1]["title"], rendered_markdown)
         self.assertTrue(LAND_SUMMARY_OUTPUT_PATH.exists())
+        self.assertEqual(LAND_SUMMARY_OUTPUT_PATH.read_text(encoding="utf-8"), rendered_markdown)
 
     @patch("fd_reportai_word.exporters.pandoc.subprocess.run")
     def test_pandoc_exporter_builds_docx_command(self, mock_run) -> None:

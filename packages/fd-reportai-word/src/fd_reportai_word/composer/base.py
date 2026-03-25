@@ -8,7 +8,16 @@ from langchain_core.messages import HumanMessage
 
 from ..assembler import DefaultAssembler
 from ..context import WordContext
-from ..domain import BlockResult, BlockTask, BlockTrace, DataContext, ValidationIssue, ValidationResult
+from ..domain import (
+    BlockResult,
+    BlockTask,
+    BlockTrace,
+    ComputedFieldDefinition,
+    DataContext,
+    ValidationIssue,
+    ValidationResult,
+)
+from ..domain.payloads import ElementValue
 from ..llm import LLMLocator, SupportsInvoke
 
 
@@ -24,9 +33,11 @@ class DefaultComposer:
         *,
         locator: LLMLocator | None = None,
         llm: SupportsInvoke | None = None,
+        computed_fields: dict[str, ComputedFieldDefinition] | None = None,
     ) -> None:
         self.locator = locator
         self.llm = llm
+        self.computed_fields = dict(computed_fields or {})
 
     def compose(self, task: BlockTask, data_context: DataContext) -> BlockResult:
         content = self._build_content(task, data_context)
@@ -54,6 +65,7 @@ class DefaultComposer:
         )
 
     def _build_content(self, task: BlockTask, data_context: DataContext):
+        self._resolve_computed_inputs(task, data_context)
         variables = {resolved.key: resolved.value for resolved in task.resolved_inputs if resolved.has_value}
         mode = task.definition.generator_mode
         block_type = task.definition.block_type
@@ -152,13 +164,83 @@ class DefaultComposer:
     def _build_ai_prompt(self, task: BlockTask, variables: dict[str, object]) -> str:
         prompt_template = task.definition.prompt_template or ""
         prompt_variables = {
-            **variables,
-            "输入数据JSON": json.dumps(variables, ensure_ascii=False, indent=2),
-            "输出字段JSON": json.dumps([resolved.key for resolved in task.resolved_inputs], ensure_ascii=False),
-            "模板名称": str(task.options.get("template_name", task.definition.key)),
-            "区块标题": task.definition.title,
+            "input": json.dumps(variables, ensure_ascii=False, indent=2),
         }
         return prompt_template.format_map(_SafeFormatDict(prompt_variables))
+
+    def _resolve_computed_inputs(self, task: BlockTask, data_context: DataContext) -> None:
+        for resolved in task.resolved_inputs:
+            if resolved.has_value:
+                continue
+            existing_value = data_context.values.get(resolved.source_key)
+            if existing_value is not None:
+                resolved.value = existing_value.value
+                resolved.has_value = True
+                resolved.used_default = False
+                continue
+            computed_field = self.computed_fields.get(resolved.source_key)
+            if computed_field is None:
+                continue
+            value = self._compute_field_value(computed_field, data_context)
+            if value is None:
+                continue
+            data_context.values[computed_field.key] = ElementValue(
+                value=value,
+                options={
+                    "computed": True,
+                    "mode": computed_field.mode,
+                },
+            )
+            resolved.value = value
+            resolved.has_value = True
+            resolved.used_default = False
+        task.missing_required_inputs = [
+            resolved.key for resolved in task.resolved_inputs if resolved.required and not resolved.has_value
+        ]
+
+    def _compute_field_value(
+        self,
+        computed_field: ComputedFieldDefinition,
+        data_context: DataContext,
+    ) -> object | None:
+        if computed_field.mode != "llm_text":
+            raise ValueError(f"Unsupported computed field mode: {computed_field.mode}.")
+
+        llm = self._resolve_llm()
+        if llm is None:
+            return None
+
+        prompt_template = computed_field.prompt_template or ""
+        if computed_field.input_blocks:
+            variables: dict[str, object] = {}
+            for input_definition in computed_field.input_blocks:
+                source_key = input_definition.source_key or input_definition.key
+                element = data_context.values.get(source_key)
+                if element is not None:
+                    variables[input_definition.key] = element.value
+                elif input_definition.default_value is not None:
+                    variables[input_definition.key] = input_definition.default_value
+        else:
+            variables = {key: element.value for key, element in data_context.values.items()}
+        prompt = prompt_template.format_map(
+            _SafeFormatDict(
+                {
+                    "input": json.dumps(variables, ensure_ascii=False, indent=2),
+                }
+            )
+        )
+        response = llm.invoke([HumanMessage(content=prompt)])
+        response_text = self._extract_content(response)
+        if data_context.metadata.get("model_version") is None:
+            data_context.metadata["model_version"] = self._extract_model_name(response)
+        return self._strip_text_result(response_text)
+
+    def _strip_text_result(self, text: str) -> str:
+        candidate = text.strip()
+        if candidate.startswith("```"):
+            candidate = candidate.split("\n", 1)[1]
+            candidate = candidate.rsplit("```", 1)[0].strip()
+        return candidate.strip().strip('"').strip("'")
 
     def _resolve_llm(self) -> SupportsInvoke | None:
         if self.locator is not None:
@@ -217,7 +299,14 @@ class NoopComposer(BaseComposer):
             context.block_results = []
             return
 
-        composer = DefaultComposer(locator=self.locator, llm=self.llm)
+        computed_fields = {
+            field_definition.key: field_definition for field_definition in context.template.computed_fields
+        }
+        composer = DefaultComposer(
+            locator=self.locator,
+            llm=self.llm,
+            computed_fields=computed_fields,
+        )
         block_results = {}
         flat_results = []
         for section in self._walk_sections(context.planned_sections):

@@ -5,7 +5,14 @@ from pathlib import Path
 import re
 from typing import Any
 
-from ..domain import BlockDefinition, DefinitionInput, ElementValue, ReportTemplate, SectionDefinition
+from ..domain import (
+    BlockDefinition,
+    ComputedFieldDefinition,
+    DefinitionInput,
+    ElementValue,
+    ReportTemplate,
+    SectionDefinition,
+)
 
 SectionBuildMode = str
 ElementMap = dict[str, ElementValue]
@@ -19,6 +26,37 @@ _INCLUDE_PATTERN = re.compile(r"\{\{\s*include\s*:\s*([^}]+?)\s*\}\}")
 @dataclass(slots=True)
 class SectionElementConfig(DefinitionInput):
     pass
+
+
+@dataclass(slots=True)
+class ComputedFieldConfig:
+    key: str
+    mode: str
+    prompt: str | None = None
+    prompt_file: str | None = None
+    input_blocks: list[SectionElementConfig] = field(default_factory=list)
+    options: dict[str, Any] = field(default_factory=dict)
+
+    def to_definition(self, *, prompts_dir: Path | None = None) -> ComputedFieldDefinition:
+        return ComputedFieldDefinition(
+            key=self.key,
+            mode=self.mode,
+            prompt_template=self._resolve_prompt(prompts_dir),
+            input_blocks=list(self.input_blocks),
+            options=dict(self.options),
+        )
+
+    def _resolve_prompt(self, prompts_dir: Path | None) -> str | None:
+        if self.prompt is not None:
+            return self.prompt
+        if self.prompt_file is None:
+            return None
+        if prompts_dir is None:
+            raise ValueError(f"prompts_dir is required for prompt_file={self.prompt_file!r}.")
+        return _load_text_with_includes(
+            base_dir=prompts_dir,
+            relative_path=self.prompt_file,
+        )
 
 
 @dataclass(slots=True)
@@ -78,7 +116,7 @@ class ReportSectionConfig:
             return None
         if templates_dir is None:
             raise ValueError(f"templates_dir is required for template_file={self.template_file!r}.")
-        return self._load_text_with_includes(
+        return _load_text_with_includes(
             base_dir=templates_dir,
             relative_path=self.template_file,
         )
@@ -90,41 +128,17 @@ class ReportSectionConfig:
             return None
         if prompts_dir is None:
             raise ValueError(f"prompts_dir is required for prompt_file={self.prompt_file!r}.")
-        return self._load_text_with_includes(
+        return _load_text_with_includes(
             base_dir=prompts_dir,
             relative_path=self.prompt_file,
         )
-
-    def _load_text_with_includes(
-        self,
-        *,
-        base_dir: Path,
-        relative_path: str,
-        visited: tuple[Path, ...] = (),
-    ) -> str:
-        file_path = (base_dir / relative_path).resolve()
-        if file_path in visited:
-            cycle = " -> ".join(str(path) for path in (*visited, file_path))
-            raise ValueError(f"Template include cycle detected: {cycle}")
-
-        content = file_path.read_text(encoding="utf-8")
-
-        def replace_include(match: re.Match[str]) -> str:
-            include_ref = match.group(1).strip()
-            include_path = file_path.parent / include_ref
-            return self._load_text_with_includes(
-                base_dir=include_path.parent,
-                relative_path=include_path.name,
-                visited=(*visited, file_path),
-            )
-
-        return _INCLUDE_PATTERN.sub(replace_include, content)
 
 
 @dataclass(slots=True)
 class WordPipelineConfig:
     name: str = "fd-reportai-word"
     title: str = "Report"
+    computed_fields: list[ComputedFieldConfig] = field(default_factory=list)
     sections: list[ReportSectionConfig] = field(default_factory=list)
     options: dict[str, Any] = field(default_factory=dict)
     version: str = "v1"
@@ -143,9 +157,38 @@ class WordPipelineConfig:
             key=self.name,
             version=self.version,
             title=self.title,
+            computed_fields=[
+                field_config.to_definition(prompts_dir=prompts_dir)
+                for field_config in self.computed_fields
+            ],
             sections=[
                 section.to_section_definition(templates_dir=templates_dir, prompts_dir=prompts_dir)
                 for section in self.sections
             ],
             options=dict(self.options),
         )
+
+
+def _load_text_with_includes(
+    *,
+    base_dir: Path,
+    relative_path: str,
+    visited: tuple[Path, ...] = (),
+) -> str:
+    file_path = (base_dir / relative_path).resolve()
+    if file_path in visited:
+        cycle = " -> ".join(str(path) for path in (*visited, file_path))
+        raise ValueError(f"Template include cycle detected: {cycle}")
+
+    content = file_path.read_text(encoding="utf-8")
+
+    def replace_include(match: re.Match[str]) -> str:
+        include_ref = match.group(1).strip()
+        include_path = file_path.parent / include_ref
+        return _load_text_with_includes(
+            base_dir=include_path.parent,
+            relative_path=include_path.name,
+            visited=(*visited, file_path),
+        )
+
+    return _INCLUDE_PATTERN.sub(replace_include, content)

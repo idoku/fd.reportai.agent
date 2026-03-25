@@ -1,36 +1,9 @@
 from __future__ import annotations
 
-from ..config import DEFAULT_RULES_DIR, ReportSectionConfig, SectionElementConfig, WordPipelineConfig
+from ..config import WordPipelineConfig
 from ..context import WordContext
+from .land.ruleset import RULESET_LAND, ruleset_land
 
-
-def ruleset_land() -> WordPipelineConfig:
-    return WordPipelineConfig(
-        name="ruleset_land_v1",
-        version="v1",
-        title="土地估价报告",
-        rules_dir=DEFAULT_RULES_DIR,
-        sections=[
-            ReportSectionConfig(
-                key="cover",
-                title="封面",
-                block_mode="prompt_generation",
-                prompt_file="land/cover_prompt.txt",
-                template_file="land/land_cover.md",
-                options={"template_name": "land/land_cover.md"},
-                elements=[
-                    SectionElementConfig(key="报告标题"),
-                    SectionElementConfig(key="项目名称"),
-                    SectionElementConfig(key="委托方"),
-                    SectionElementConfig(key="报告编号"),
-                    SectionElementConfig(key="提交日期"),
-                ],
-            )
-        ],
-    )
-
-
-RULESET_LAND = ruleset_land()
 
 DEFAULT_RULESETS: dict[str, WordPipelineConfig] = {
     "ruleset_land": RULESET_LAND,

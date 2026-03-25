@@ -25,7 +25,7 @@ def load_json(path: Path) -> dict[str, object]:
 
 
 class TestLandCoverPipeline(unittest.TestCase):
-    def test_pipeline_reads_land_cover_input_from_path(self) -> None:
+    def test_pipeline_renders_land_cover_with_doubao(self) -> None:
         load_dotenv_if_available(ROOT)
         elements = load_json(INPUT_JSON_PATH)
         locator = LLMLocator(
@@ -41,7 +41,8 @@ class TestLandCoverPipeline(unittest.TestCase):
             metadata={"data_snapshot_id": "cover-snapshot-1"},
         )
 
-        rendered_cover = result.composed_document["sections"][0]["content"]
+        cover_block = result.block_results[0]
+        cover_text = cover_block.content["text"]
         rendered_markdown = result.rendered_output["markdown"]
 
         OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -49,19 +50,21 @@ class TestLandCoverPipeline(unittest.TestCase):
 
         self.assertIsNotNone(result.framework)
         self.assertEqual(result.framework.name, "ruleset_land_v1")
-        self.assertEqual(result.composed_document["sections"][0]["key"], "cover")
-        self.assertEqual(len(result.composed_document["sections"]), 1)
+        self.assertEqual(len(result.block_results), 1)
+        self.assertEqual(cover_block.block_key, "cover")
+        self.assertEqual(cover_block.generator_mode, "template")
         self.assertEqual(result.blocked_items, [])
         self.assertEqual(result.validation_errors, [])
-        self.assertTrue(result.elements["报告标题"].value)
-        self.assertTrue(result.elements["报告编号"].value)
-        self.assertIn(f"# {result.elements['报告标题'].value}", rendered_cover)
-        self.assertIn(str(result.elements["项目名称"].value), rendered_cover)
-        self.assertIn(str(result.elements["委托方"].value), rendered_markdown)
-        self.assertIn(str(result.elements["报告编号"].value), rendered_markdown)
+        self.assertEqual(cover_block.trace.data_snapshot_id, "cover-snapshot-1")
+        self.assertIn("# 土地估价报告", cover_text)
+        self.assertIn("项目名称：长沙银行股份有限公司抵押价值评估项目", cover_text)
+        self.assertIn("委托方：湖南经典房地产评估咨询有限公司", cover_text)
+        self.assertIn("报告编号：湘经评估（2025）字第03411A号", cover_text)
+        self.assertIn("提交日期：二〇二五年十二月十六日", cover_text)
+        self.assertIn("# 土地估价报告", rendered_markdown)
         self.assertIn("## 封面", rendered_markdown)
-        self.assertEqual(result.block_results[0].generator_mode, "ai")
-        self.assertTrue(result.block_results[0].trace.model_version)
+        self.assertIn("项目名称：长沙银行股份有限公司抵押价值评估项目", rendered_markdown)
+        self.assertIn("委托方：湖南经典房地产评估咨询有限公司", rendered_markdown)
         self.assertTrue(OUTPUT_MARKDOWN_PATH.exists())
         self.assertEqual(OUTPUT_MARKDOWN_PATH.read_text(encoding="utf-8"), rendered_markdown)
 

@@ -110,3 +110,24 @@ class NoopBlocker(BaseBlocker):
             context.plan,
             context.data_context,
         )
+        computed_field_keys = {field.key for field in (context.template.computed_fields if context.template else [])}
+        if not computed_field_keys:
+            return
+        self._clear_computable_missing_inputs(context.planned_sections, computed_field_keys)
+        context.blocked_items = DefaultBlocker()._collect_blocked_items(context.planned_sections)
+
+    def _clear_computable_missing_inputs(
+        self,
+        sections: list[PlannedSection],
+        computed_field_keys: set[str],
+    ) -> None:
+        for section in sections:
+            for task in section.tasks:
+                task.missing_required_inputs = [
+                    resolved.key
+                    for resolved in task.resolved_inputs
+                    if resolved.required
+                    and not resolved.has_value
+                    and resolved.source_key not in computed_field_keys
+                ]
+            self._clear_computable_missing_inputs(section.children, computed_field_keys)

@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from langchain_core.messages import AIMessage
+
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_SRC = ROOT / "packages" / "fd-reportai-word" / "src"
@@ -12,9 +14,25 @@ PACKAGE_SRC = ROOT / "packages" / "fd-reportai-word" / "src"
 if str(PACKAGE_SRC) not in sys.path:
     sys.path.insert(0, str(PACKAGE_SRC))
 
-from fd_reportai_word.config import ElementValue, ReportSectionConfig, SectionElementConfig, WordPipelineConfig  # noqa: E402
+from fd_reportai_word.config import (  # noqa: E402
+    ComputedFieldConfig,
+    ElementValue,
+    ReportSectionConfig,
+    SectionElementConfig,
+    WordPipelineConfig,
+)
 from fd_reportai_word.exporters import PandocDocxExporter  # noqa: E402
 from fd_reportai_word.pipeline import WordPipeline  # noqa: E402
+
+
+class CountingModel:
+    def __init__(self, content: str) -> None:
+        self.content = content
+        self.calls = 0
+
+    def invoke(self, input, config=None, **kwargs):
+        self.calls += 1
+        return AIMessage(content=self.content, response_metadata={"model_name": "counting-model"})
 
 
 class TestFdReportAiWord(unittest.TestCase):
@@ -75,6 +93,48 @@ class TestFdReportAiWord(unittest.TestCase):
         self.assertIn("## Summary", context.rendered_output["markdown"])
         self.assertIn("Company: FD\nSummary: Growth remains stable.", context.rendered_output["markdown"])
         self.assertEqual(context.composed_document["blocked_items"], [])
+        self.assertEqual(context.validation_errors, [])
+
+    def test_computed_field_is_resolved_once_and_reused(self) -> None:
+        llm = CountingModel("Derived Project Name")
+
+        cover_fragment = ReportSectionConfig(
+            key="cover",
+            title="Cover",
+            block_mode="template_fill",
+            template="Project: {project_name}",
+            elements=[SectionElementConfig(key="project_name")],
+        )
+        summary_fragment = ReportSectionConfig(
+            key="summary",
+            title="Summary",
+            block_mode="template_fill",
+            template="Summary project: {valuation_project_name}",
+            elements=[SectionElementConfig(key="valuation_project_name", source_key="project_name")],
+        )
+
+        framework = WordPipelineConfig(
+            title="Computed Field Report",
+            computed_fields=[
+                ComputedFieldConfig(
+                    key="project_name",
+                    mode="llm_text",
+                    prompt="Generate a project name from:\n{input}",
+                    input_blocks=[],
+                )
+            ],
+            sections=[cover_fragment, summary_fragment],
+        )
+
+        context = WordPipeline(llm=llm).run(framework=framework, elements={})
+
+        self.assertEqual(context.composed_document["sections"][0]["content"], "Project: Derived Project Name")
+        self.assertEqual(
+            context.composed_document["sections"][1]["content"],
+            "Summary project: Derived Project Name",
+        )
+        self.assertEqual(llm.calls, 1)
+        self.assertEqual(context.blocked_items, [])
         self.assertEqual(context.validation_errors, [])
 
     @patch("fd_reportai_word.exporters.pandoc.subprocess.run")

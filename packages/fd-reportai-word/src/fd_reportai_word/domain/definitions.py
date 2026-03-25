@@ -32,6 +32,15 @@ class BlockDefinition:
 
 
 @dataclass(slots=True)
+class ComputedFieldDefinition:
+    key: str
+    mode: str
+    prompt_template: str | None = None
+    input_blocks: list[DefinitionInput] = field(default_factory=list)
+    options: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
 class SectionDefinition:
     key: str
     title: str
@@ -47,6 +56,7 @@ class ReportTemplate:
     version: str = "v1"
     title: str = "Report"
     sections: list[SectionDefinition] = field(default_factory=list)
+    computed_fields: list[ComputedFieldDefinition] = field(default_factory=list)
     options: dict[str, Any] = field(default_factory=dict)
 
 

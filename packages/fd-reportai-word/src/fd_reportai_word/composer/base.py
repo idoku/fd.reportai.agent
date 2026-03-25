@@ -7,11 +7,13 @@ import json
 from langchain_core.messages import HumanMessage
 
 from ..assembler import DefaultAssembler
+from ..blocker.base import DefaultBlocker
 from ..context import WordContext
 from ..domain import (
     BlockResult,
     BlockTask,
     BlockTrace,
+    ContentItemDefinition,
     ComputedFieldDefinition,
     DataContext,
     ValidationIssue,
@@ -38,6 +40,7 @@ class DefaultComposer:
         self.locator = locator
         self.llm = llm
         self.computed_fields = dict(computed_fields or {})
+        self.blocker = DefaultBlocker()
 
     def compose(self, task: BlockTask, data_context: DataContext) -> BlockResult:
         content = self._build_content(task, data_context)
@@ -67,6 +70,7 @@ class DefaultComposer:
     def _build_content(self, task: BlockTask, data_context: DataContext):
         self._resolve_computed_inputs(task, data_context)
         variables = {resolved.key: resolved.value for resolved in task.resolved_inputs if resolved.has_value}
+        variables.update(self._build_content_item_values(task.definition.content_items, data_context))
         mode = task.definition.generator_mode
         block_type = task.definition.block_type
 
@@ -168,8 +172,42 @@ class DefaultComposer:
         }
         return prompt_template.format_map(_SafeFormatDict(prompt_variables))
 
+    def _build_content_item_values(
+        self,
+        content_items: list[ContentItemDefinition],
+        data_context: DataContext,
+    ) -> dict[str, str]:
+        values: dict[str, str] = {}
+        for content_item in content_items:
+            values[content_item.key] = self._render_content_item(content_item, data_context)
+        return values
+
+    def _render_content_item(
+        self,
+        content_item: ContentItemDefinition,
+        data_context: DataContext,
+    ) -> str:
+        variables = self._resolve_content_item_variables(content_item.inputs, data_context)
+        template = content_item.template or ""
+        return template.format_map(_SafeFormatDict(variables))
+
+    def _resolve_content_item_variables(
+        self,
+        definitions: list,
+        data_context: DataContext,
+    ) -> dict[str, object]:
+        resolved_inputs = self.blocker._resolve_inputs(definitions, data_context)
+        self._resolve_computed_values(resolved_inputs, data_context)
+        return {resolved.key: resolved.value for resolved in resolved_inputs if resolved.has_value}
+
     def _resolve_computed_inputs(self, task: BlockTask, data_context: DataContext) -> None:
-        for resolved in task.resolved_inputs:
+        self._resolve_computed_values(task.resolved_inputs, data_context)
+        task.missing_required_inputs = [
+            resolved.key for resolved in task.resolved_inputs if resolved.required and not resolved.has_value
+        ]
+
+    def _resolve_computed_values(self, resolved_inputs, data_context: DataContext) -> None:
+        for resolved in resolved_inputs:
             if resolved.has_value:
                 continue
             existing_value = data_context.values.get(resolved.source_key)
@@ -194,9 +232,6 @@ class DefaultComposer:
             resolved.value = value
             resolved.has_value = True
             resolved.used_default = False
-        task.missing_required_inputs = [
-            resolved.key for resolved in task.resolved_inputs if resolved.required and not resolved.has_value
-        ]
 
     def _compute_field_value(
         self,

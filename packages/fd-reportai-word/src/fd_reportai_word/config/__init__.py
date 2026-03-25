@@ -1,4 +1,5 @@
 from .settings import (
+    ContentItemConfig,
     ComputedFieldConfig,
     DEFAULT_RULES_DIR,
     DEFAULT_PROMPTS_DIR,
@@ -15,6 +16,7 @@ __all__ = [
     "DEFAULT_RULES_DIR",
     "DEFAULT_PROMPTS_DIR",
     "DEFAULT_TEMPLATES_DIR",
+    "ContentItemConfig",
     "ComputedFieldConfig",
     "ElementMap",
     "ElementValue",

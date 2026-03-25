@@ -50,7 +50,7 @@ class TestLandCoverPipeline(unittest.TestCase):
 
         self.assertIsNotNone(result.framework)
         self.assertEqual(result.framework.name, "ruleset_land_v1")
-        self.assertEqual(len(result.block_results), 1)
+        self.assertEqual(len(result.block_results), 2)
         self.assertEqual(cover_block.block_key, "cover")
         self.assertEqual(cover_block.generator_mode, "template")
         self.assertEqual(result.blocked_items, [])
@@ -72,6 +72,11 @@ class TestLandCoverPipeline(unittest.TestCase):
         self.assertIn("长沙银行股份有限公司", rendered_markdown)
         self.assertIn("冷水江市创新实业有限公司", rendered_markdown)
         self.assertIn("委托方：长沙银行股份有限公司", rendered_markdown)
+        self.assertIn("## 摘要", rendered_markdown)
+        self.assertIn("一、估价项目名称", rendered_markdown)
+        self.assertIn("二、委托估价方", rendered_markdown)
+        self.assertIn("委托人与估价对象土地使用者之间的关系：", rendered_markdown)
+        self.assertIn("三、估价目的", rendered_markdown)
         self.assertTrue(OUTPUT_MARKDOWN_PATH.exists())
         self.assertEqual(OUTPUT_MARKDOWN_PATH.read_text(encoding="utf-8"), rendered_markdown)
 

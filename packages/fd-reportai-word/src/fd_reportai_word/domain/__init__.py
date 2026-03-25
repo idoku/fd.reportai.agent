@@ -1,5 +1,6 @@
 from .definitions import (
     BlockDefinition,
+    ContentItemDefinition,
     ComputedFieldDefinition,
     DefinitionInput,
     GenerationPlan,
@@ -16,6 +17,7 @@ __all__ = [
     "BlockResult",
     "BlockTask",
     "BlockTrace",
+    "ContentItemDefinition",
     "ComputedFieldDefinition",
     "DataContext",
     "DefinitionInput",

@@ -7,6 +7,7 @@ from typing import Any
 
 from ..domain import (
     BlockDefinition,
+    ContentItemDefinition,
     ComputedFieldDefinition,
     DefinitionInput,
     ElementValue,
@@ -26,6 +27,35 @@ _INCLUDE_PATTERN = re.compile(r"\{\{\s*include\s*:\s*([^}]+?)\s*\}\}")
 @dataclass(slots=True)
 class SectionElementConfig(DefinitionInput):
     pass
+
+
+@dataclass(slots=True)
+class ContentItemConfig:
+    key: str
+    template: str | None = None
+    template_file: str | None = None
+    elements: list[SectionElementConfig] = field(default_factory=list)
+    options: dict[str, Any] = field(default_factory=dict)
+
+    def to_definition(self, *, templates_dir: Path | None = None) -> ContentItemDefinition:
+        return ContentItemDefinition(
+            key=self.key,
+            template=self._resolve_template(templates_dir),
+            inputs=list(self.elements),
+            options=dict(self.options),
+        )
+
+    def _resolve_template(self, templates_dir: Path | None) -> str | None:
+        if self.template is not None:
+            return self.template
+        if self.template_file is None:
+            return None
+        if templates_dir is None:
+            raise ValueError(f"templates_dir is required for template_file={self.template_file!r}.")
+        return _load_text_with_includes(
+            base_dir=templates_dir,
+            relative_path=self.template_file,
+        )
 
 
 @dataclass(slots=True)
@@ -70,6 +100,7 @@ class ReportSectionConfig:
     prompt_file: str | None = None
     few_shots: list[dict[str, str]] = field(default_factory=list)
     elements: list[SectionElementConfig] = field(default_factory=list)
+    content_items: list[ContentItemConfig] = field(default_factory=list)
     children: list["ReportSectionConfig"] = field(default_factory=list)
     options: dict[str, Any] = field(default_factory=dict)
     block_type: str = "rich_text"
@@ -95,6 +126,9 @@ class ReportSectionConfig:
             prompt_template=self._resolve_prompt(prompts_dir),
             few_shots=list(self.few_shots),
             inputs=list(self.elements),
+            content_items=[
+                content_item.to_definition(templates_dir=templates_dir) for content_item in self.content_items
+            ],
             compute_key=self.compute_key,
             options=dict(self.options),
         )

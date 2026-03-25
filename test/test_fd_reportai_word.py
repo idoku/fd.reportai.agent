@@ -15,6 +15,7 @@ if str(PACKAGE_SRC) not in sys.path:
     sys.path.insert(0, str(PACKAGE_SRC))
 
 from fd_reportai_word.config import (  # noqa: E402
+    ContentItemConfig,
     ComputedFieldConfig,
     ElementValue,
     ReportSectionConfig,
@@ -209,6 +210,78 @@ class TestFdReportAiWord(unittest.TestCase):
         )
 
         self.assertEqual(context.composed_document["sections"][0]["content"], "Client: 长沙银行股份有限公司")
+        self.assertEqual(context.blocked_items, [])
+        self.assertEqual(context.validation_errors, [])
+
+    def test_section_element_alias_reads_nested_input_and_applies_transform(self) -> None:
+        cover_fragment = ReportSectionConfig(
+            key="cover",
+            title="Cover",
+            block_mode="template_fill",
+            template="Client: {委托方}\nDate: {提交日期}",
+            elements=[
+                SectionElementConfig(key="委托方", aliases=["委托方名称"]),
+                SectionElementConfig(key="提交日期", aliases=["报告完成日期"], options={"transform": "cn_date"}),
+            ],
+        )
+
+        framework = WordPipelineConfig(
+            title="Alias Transform Report",
+            sections=[cover_fragment],
+        )
+
+        context = WordPipeline().run(
+            framework=framework,
+            elements={
+                "委托估价方": {"委托方名称": "长沙银行股份有限公司"},
+                "项目信息": {"报告完成日期": "2025年12月10日"},
+            },
+        )
+
+        self.assertEqual(
+            context.composed_document["sections"][0]["content"],
+            "Client: 长沙银行股份有限公司\nDate: 二〇二五年十二月十日",
+        )
+        self.assertEqual(context.blocked_items, [])
+        self.assertEqual(context.validation_errors, [])
+
+    def test_section_content_items_support_template_rendering(self) -> None:
+        summary_fragment = ReportSectionConfig(
+            key="summary",
+            title="Summary",
+            block_mode="template_fill",
+            template="Client Info\n{委托估价方}",
+            content_items=[
+                ContentItemConfig(
+                    key="委托估价方",
+                    template="委托估价方：{委托方}\n联系人：{联系人}",
+                    elements=[
+                        SectionElementConfig(key="委托方", aliases=["委托方名称"]),
+                        SectionElementConfig(key="联系人"),
+                    ],
+                )
+            ],
+        )
+
+        framework = WordPipelineConfig(
+            title="Content Item Report",
+            sections=[summary_fragment],
+        )
+
+        context = WordPipeline().run(
+            framework=framework,
+            elements={
+                "委托估价方": {
+                    "委托方名称": "长沙银行股份有限公司",
+                    "联系人": "王经理",
+                }
+            },
+        )
+
+        self.assertEqual(
+            context.composed_document["sections"][0]["content"],
+            "Client Info\n委托估价方：长沙银行股份有限公司\n联系人：王经理",
+        )
         self.assertEqual(context.blocked_items, [])
         self.assertEqual(context.validation_errors, [])
 

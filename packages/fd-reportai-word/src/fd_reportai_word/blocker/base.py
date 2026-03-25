@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+import re
 
 from ..context import WordContext
 from ..domain import (
@@ -82,53 +83,51 @@ class DefaultBlocker:
         for candidate_key in candidate_keys:
             element = data_context.values.get(candidate_key)
             if element is not None:
-                return candidate_key, element
-            extracted = self._extract_element_from_path(candidate_key, data_context)
+                return candidate_key, self._transform_element_value(element, definition)
+
+        for candidate_key in candidate_keys:
+            extracted = self._find_nested_value(data_context.values, candidate_key)
             if extracted is not None:
-                transformed = self._apply_transform(extracted, definition.options.get("transform"))
-                return candidate_key, ElementValue(value=transformed)
+                return candidate_key, ElementValue(
+                    value=self._apply_transform(extracted, definition.options.get("transform"))
+                )
+
         return definition.source_key or definition.key, None
 
-    def _extract_element_from_path(self, path: str, data_context: DataContext) -> object | None:
-        if "." not in path and "[" not in path:
-            return None
-        current: object | None = data_context.values
-        for part in path.split("."):
-            if current is None:
-                return None
-            current = self._resolve_path_part(current, part)
-        if isinstance(current, ElementValue):
-            return current.value
-        return current
-
-    def _resolve_path_part(self, current: object, part: str) -> object | None:
-        token = part.strip()
-        if not token:
-            return current
-        while token:
-            if "[" in token:
-                field_name, rest = token.split("[", 1)
-                if field_name:
-                    current = self._resolve_mapping_value(current, field_name)
-                index_text, remainder = rest.split("]", 1)
-                if not isinstance(current, list):
-                    return None
-                try:
-                    current = current[int(index_text)]
-                except (ValueError, IndexError):
-                    return None
-                token = remainder
-            else:
-                current = self._resolve_mapping_value(current, token)
-                token = ""
-        return current
-
-    def _resolve_mapping_value(self, current: object, key: str) -> object | None:
+    def _find_nested_value(self, current: object, target_key: str) -> object | None:
         if isinstance(current, ElementValue):
             current = current.value
+
         if isinstance(current, dict):
-            return current.get(key)
+            if target_key in current:
+                value = current[target_key]
+                if isinstance(value, ElementValue):
+                    return value.value
+                return value
+            for value in current.values():
+                nested = self._find_nested_value(value, target_key)
+                if nested is not None:
+                    return nested
+            return None
+
+        if isinstance(current, list):
+            for item in current:
+                nested = self._find_nested_value(item, target_key)
+                if nested is not None:
+                    return nested
+
         return None
+
+    def _transform_element_value(self, element: ElementValue, definition: DefinitionInput) -> ElementValue:
+        transform = definition.options.get("transform")
+        if transform is None:
+            return element
+        return ElementValue(
+            value=self._apply_transform(element.value, transform),
+            label=element.label,
+            type=element.type,
+            options=dict(element.options),
+        )
 
     def _apply_transform(self, value: object | None, transform: object) -> object | None:
         if value is None or transform is None:
@@ -138,8 +137,6 @@ class DefaultBlocker:
         raise ValueError(f"Unsupported transform: {transform}.")
 
     def _to_chinese_date(self, value: str) -> str:
-        import re
-
         match = re.fullmatch(r"\s*(\d{4})年(\d{1,2})月(\d{1,2})日\s*", value)
         if not match:
             return value

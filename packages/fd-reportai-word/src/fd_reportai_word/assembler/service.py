@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...domain import BlockResult, PlannedSection, ReportDocument, ReportSectionDocument
+from ..domain import BlockResult, PlannedSection, ReportDocument, ReportSectionDocument
 
 
 class DefaultAssembler:

@@ -1,3 +1,3 @@
-from .base import BaseBlocker, NoopBlocker
+from .base import BaseBlocker, DefaultBlocker, NoopBlocker
 
-__all__ = ["BaseBlocker", "NoopBlocker"]
+__all__ = ["BaseBlocker", "DefaultBlocker", "NoopBlocker"]

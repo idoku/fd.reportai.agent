@@ -9,6 +9,7 @@ from .config import ElementMap, ElementValue, WordPipelineConfig
 from .context import WordContext
 from .converters import BaseConverter, NoopConverter
 from .detectors import BaseDetector, NoopDetector
+from .llm import LLMLocator, SupportsInvoke
 from .planner import BasePlanner, NoopPlanner
 from .renderer import BaseRenderer, NoopRenderer
 from .rules.default_rulesets import apply_default_ruleset
@@ -24,6 +25,8 @@ class WordPipeline:
     composer: BaseComposer = field(default_factory=NoopComposer)
     validators: list[BaseValidator] = field(default_factory=lambda: [NoopValidator()])
     renderers: list[BaseRenderer] = field(default_factory=lambda: [NoopRenderer()])
+    locator: LLMLocator | None = None
+    llm: SupportsInvoke | None = None
 
     def create_context(
         self,
@@ -55,6 +58,10 @@ class WordPipeline:
             )
         else:
             apply_default_ruleset(context)
+
+        if isinstance(self.composer, NoopComposer):
+            self.composer.locator = self.locator
+            self.composer.llm = self.llm
 
         for detector in self.detectors:
             detector.detect(context)

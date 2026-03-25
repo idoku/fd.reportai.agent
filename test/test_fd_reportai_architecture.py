@@ -11,7 +11,7 @@ PACKAGE_SRC = ROOT / "packages" / "fd-reportai-word" / "src"
 if str(PACKAGE_SRC) not in sys.path:
     sys.path.insert(0, str(PACKAGE_SRC))
 
-from fd_reportai_word.application import DefaultAssembler, DefaultBlocker, DefaultComposer, DefaultPlanner, DefaultRenderer  # noqa: E402
+from fd_reportai_word import DefaultAssembler, DefaultBlocker, DefaultComposer, DefaultPlanner, DefaultRenderer  # noqa: E402
 from fd_reportai_word.domain import BlockDefinition, DataContext, DefinitionInput, ElementValue, ReportTemplate, SectionDefinition  # noqa: E402
 
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from langchain_core.messages import AIMessage
@@ -18,10 +17,6 @@ class EchoChatModel:
 
     def invoke(self, input: Any, config: Any = None, **kwargs: Any) -> AIMessage:
         text = self._stringify_input(input)
-        if "必须输出的字段" in text and "输入数据(JSON)" in text:
-            payload = self._extract_selected_input(text)
-            content = json.dumps(self._build_cover_fields(payload), ensure_ascii=False)
-            return AIMessage(content=content, response_metadata={"model_name": self.model})
         return AIMessage(
             content=(
                 "[MOCK:langchain]\n"
@@ -35,26 +30,6 @@ class EchoChatModel:
         if isinstance(input, list):
             return "\n".join(str(getattr(item, "content", item)) for item in input)
         return str(input)
-
-    def _extract_selected_input(self, text: str) -> dict[str, Any]:
-        marker = "```json"
-        if marker not in text:
-            return {}
-        content = text.split(marker, 1)[1].split("```", 1)[0].strip()
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            return {}
-
-    def _build_cover_fields(self, payload: dict[str, Any]) -> dict[str, str]:
-        info = payload.get("项目信息", {})
-        return {
-            "报告标题": str(info.get("报告标题", "土地估价报告")),
-            "项目名称": str(info.get("项目名称", "")),
-            "委托方": str(info.get("委托方", "")),
-            "报告编号": str(info.get("报告编号", "")),
-            "提交日期": str(info.get("提交日期", "")),
-        }
 
 
 def _build_chat_openai(config: LlmProviderConfig) -> SupportsInvoke:

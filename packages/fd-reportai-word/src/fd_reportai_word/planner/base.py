@@ -2,8 +2,19 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from ..application import DefaultPlanner
 from ..context import WordContext
+from ..domain import GenerationPlan, ReportTemplate
+
+
+class DefaultPlanner:
+    def plan(self, template: ReportTemplate) -> GenerationPlan:
+        sections = [section for section in template.sections if section.enabled]
+        return GenerationPlan(
+            template_key=template.key,
+            template_version=template.version,
+            sections=sections,
+            options=dict(template.options),
+        )
 
 
 class BasePlanner(ABC):

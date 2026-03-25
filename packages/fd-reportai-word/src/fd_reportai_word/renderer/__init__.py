@@ -1,3 +1,3 @@
-from .base import BaseRenderer, NoopRenderer
+from .base import BaseRenderer, DefaultRenderer, NoopRenderer
 
-__all__ = ["BaseRenderer", "NoopRenderer"]
+__all__ = ["BaseRenderer", "DefaultRenderer", "NoopRenderer"]

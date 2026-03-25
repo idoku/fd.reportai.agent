@@ -2,8 +2,14 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from ..application import DefaultAssembler, DefaultComposer
+import json
+
+from langchain_core.messages import HumanMessage
+
+from ..assembler import DefaultAssembler
 from ..context import WordContext
+from ..domain import BlockResult, BlockTask, BlockTrace, DataContext, ValidationIssue, ValidationResult
+from ..llm import LLMLocator, SupportsInvoke
 
 
 class BaseComposer(ABC):
@@ -12,14 +18,206 @@ class BaseComposer(ABC):
         raise NotImplementedError
 
 
+class DefaultComposer:
+    def __init__(
+        self,
+        *,
+        locator: LLMLocator | None = None,
+        llm: SupportsInvoke | None = None,
+    ) -> None:
+        self.locator = locator
+        self.llm = llm
+
+    def compose(self, task: BlockTask, data_context: DataContext) -> BlockResult:
+        content = self._build_content(task, data_context)
+        validation = self._validate(task, content)
+        trace = BlockTrace(
+            template_version=data_context.metadata.get("template_version"),
+            rule_version=data_context.metadata.get("rule_version"),
+            prompt_version=data_context.metadata.get("prompt_version"),
+            model_version=data_context.metadata.get("model_version"),
+            data_snapshot_id=data_context.snapshot_id,
+            input_snapshot={item.key: item.value for item in task.resolved_inputs},
+        )
+        return BlockResult(
+            section_key=task.section_key,
+            block_key=task.definition.key,
+            title=task.definition.title,
+            block_type=task.definition.block_type,
+            generator_mode=task.definition.generator_mode,
+            content=content,
+            resolved_inputs=task.resolved_inputs,
+            missing_required_inputs=list(task.missing_required_inputs),
+            trace=trace,
+            validation=validation,
+            options=dict(task.options),
+        )
+
+    def _build_content(self, task: BlockTask, data_context: DataContext):
+        variables = {resolved.key: resolved.value for resolved in task.resolved_inputs if resolved.has_value}
+        mode = task.definition.generator_mode
+        block_type = task.definition.block_type
+
+        if mode == "template":
+            template = task.definition.template or ""
+            rendered = template.format_map(_SafeFormatDict(variables))
+            return self._shape_content(block_type, rendered)
+
+        if mode == "computed":
+            compute_registry = data_context.metadata.get("compute_registry", {})
+            compute_fn = compute_registry.get(task.definition.compute_key or task.definition.key)
+            if not callable(compute_fn):
+                raise ValueError(f"Missing compute function for block {task.definition.key}.")
+            computed = compute_fn(variables, task=task)
+            return self._shape_content(block_type, computed)
+
+        if mode == "ai":
+            prompt = self._build_ai_prompt(task, variables)
+            llm = self._resolve_llm()
+            if llm is None:
+                return {
+                    "type": block_type,
+                    "generator_mode": "ai",
+                    "mode": "prompt_generation",
+                    "prompt": prompt,
+                    "few_shots": list(task.definition.few_shots),
+                    "variables": variables,
+                }
+
+            response = llm.invoke([HumanMessage(content=prompt)])
+            response_text = self._extract_content(response)
+            data_context.metadata["model_version"] = self._extract_model_name(response)
+            generated_fields = self._parse_json_object(response_text)
+            if task.definition.template:
+                rendered = task.definition.template.format_map(_SafeFormatDict(generated_fields))
+                return self._shape_content(block_type, rendered)
+            return {
+                "type": block_type,
+                "generator_mode": "ai",
+                "mode": "llm_result",
+                "prompt": prompt,
+                "response": response_text,
+                "fields": generated_fields,
+                "few_shots": list(task.definition.few_shots),
+                "variables": variables,
+            }
+
+        raise ValueError(f"Unsupported generator mode: {mode}.")
+
+    def _shape_content(self, block_type: str, raw_content):
+        if block_type == "rich_text":
+            return {"type": "rich_text", "text": raw_content if isinstance(raw_content, str) else str(raw_content)}
+        if block_type == "table":
+            if isinstance(raw_content, dict):
+                return {"type": "table", **raw_content}
+            return {"type": "table", "rows": raw_content}
+        if block_type == "image_group":
+            if isinstance(raw_content, dict):
+                return {"type": "image_group", **raw_content}
+            return {"type": "image_group", "items": raw_content}
+        return {"type": block_type, "content": raw_content}
+
+    def _validate(self, task: BlockTask, content) -> ValidationResult:
+        issues: list[ValidationIssue] = []
+        if task.missing_required_inputs:
+            issues.append(
+                ValidationIssue(
+                    code="missing_required_inputs",
+                    message=f"Block {task.definition.key} is missing required inputs.",
+                )
+            )
+        if task.definition.generator_mode == "template" and not task.definition.template:
+            issues.append(
+                ValidationIssue(
+                    code="missing_template",
+                    message=f"Block {task.definition.key} requires a template.",
+                )
+            )
+        if task.definition.generator_mode == "ai" and not task.definition.prompt_template:
+            issues.append(
+                ValidationIssue(
+                    code="missing_prompt_template",
+                    message=f"Block {task.definition.key} requires a prompt template.",
+                )
+            )
+        if isinstance(content, dict) and not content:
+            issues.append(
+                ValidationIssue(
+                    code="empty_content",
+                    message=f"Block {task.definition.key} produced empty content.",
+                )
+            )
+        return ValidationResult(is_valid=not issues, issues=issues)
+
+    def _build_ai_prompt(self, task: BlockTask, variables: dict[str, object]) -> str:
+        prompt_template = task.definition.prompt_template or ""
+        prompt_variables = {
+            **variables,
+            "输入数据JSON": json.dumps(variables, ensure_ascii=False, indent=2),
+            "输出字段JSON": json.dumps([resolved.key for resolved in task.resolved_inputs], ensure_ascii=False),
+            "模板名称": str(task.options.get("template_name", task.definition.key)),
+            "区块标题": task.definition.title,
+        }
+        return prompt_template.format_map(_SafeFormatDict(prompt_variables))
+
+    def _resolve_llm(self) -> SupportsInvoke | None:
+        if self.locator is not None:
+            return self.locator.get_llm()
+        return self.llm
+
+    def _extract_content(self, response) -> str:
+        content = getattr(response, "content", response)
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    parts.append(item)
+                elif isinstance(item, dict) and "text" in item:
+                    parts.append(str(item["text"]))
+                else:
+                    text = getattr(item, "text", None)
+                    if text is not None:
+                        parts.append(str(text))
+            return "\n".join(part for part in parts if part).strip()
+        return str(content)
+
+    def _extract_model_name(self, response) -> str | None:
+        metadata = getattr(response, "response_metadata", {})
+        if isinstance(metadata, dict):
+            return metadata.get("model_name")
+        return None
+
+    def _parse_json_object(self, text: str) -> dict[str, object]:
+        candidate = text.strip()
+        if candidate.startswith("```"):
+            candidate = candidate.split("\n", 1)[1]
+            candidate = candidate.rsplit("```", 1)[0].strip()
+        start = candidate.find("{")
+        end = candidate.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            raise ValueError(f"LLM did not return a JSON object: {text}")
+        return json.loads(candidate[start : end + 1])
+
+
 class NoopComposer(BaseComposer):
+    def __init__(
+        self,
+        *,
+        locator: LLMLocator | None = None,
+        llm: SupportsInvoke | None = None,
+    ) -> None:
+        self.locator = locator
+        self.llm = llm
+
     def compose(self, context: WordContext) -> None:
         if context.framework is None or context.plan is None or context.data_context is None:
             context.composed_document = None
             context.block_results = []
             return
 
-        composer = DefaultComposer()
+        composer = DefaultComposer(locator=self.locator, llm=self.llm)
         block_results = {}
         flat_results = []
         for section in self._walk_sections(context.planned_sections):
@@ -43,3 +241,8 @@ class NoopComposer(BaseComposer):
         for section in sections:
             yield section
             yield from self._walk_sections(section.children)
+
+
+class _SafeFormatDict(dict):
+    def __missing__(self, key: str) -> str:
+        return "{" + key + "}"

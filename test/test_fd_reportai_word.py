@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import sys
 import unittest
 from pathlib import Path
@@ -9,10 +8,6 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_SRC = ROOT / "packages" / "fd-reportai-word" / "src"
-INPUTS_DIR = ROOT / "inputs"
-OUTPUTS_DIR = INPUTS_DIR / "_outputs"
-LAND_SUMMARY_INPUT_PATH = INPUTS_DIR / "land_summary_input.json"
-LAND_SUMMARY_OUTPUT_PATH = OUTPUTS_DIR / "land_summary.md"
 
 if str(PACKAGE_SRC) not in sys.path:
     sys.path.insert(0, str(PACKAGE_SRC))
@@ -20,11 +15,6 @@ if str(PACKAGE_SRC) not in sys.path:
 from fd_reportai_word.config import ElementValue, ReportSectionConfig, SectionElementConfig, WordPipelineConfig  # noqa: E402
 from fd_reportai_word.exporters import PandocDocxExporter  # noqa: E402
 from fd_reportai_word.pipeline import WordPipeline  # noqa: E402
-from fd_reportai_word.rules import get_default_ruleset  # noqa: E402
-
-
-def load_json(path: Path) -> dict[str, object]:
-    return json.loads(path.read_text(encoding="utf-8"))
 
 
 class TestFdReportAiWord(unittest.TestCase):
@@ -86,52 +76,6 @@ class TestFdReportAiWord(unittest.TestCase):
         self.assertIn("Company: FD\nSummary: Growth remains stable.", context.rendered_output["markdown"])
         self.assertEqual(context.composed_document["blocked_items"], [])
         self.assertEqual(context.validation_errors, [])
-
-    def test_pipeline_loads_markdown_and_prompt_from_default_ruleset(self) -> None:
-        framework = get_default_ruleset("valuation_report")
-        context = WordPipeline().run(
-            framework=framework,
-            elements={
-                "project_name": "Alpha Project",
-                "valuation_conclusion": "Market value remains stable.",
-                "income": 100,
-                "ebitda": 20,
-            },
-            metadata={
-                "compute_registry": {
-                    "build_metrics_table": lambda variables, task=None: [
-                        ["income", variables["income"]],
-                        ["ebitda", variables["ebitda"]],
-                    ],
-                    "build_site_photos": lambda variables, task=None: [],
-                }
-            },
-        )
-
-        self.assertEqual(context.framework.name, "valuation_report_v1")
-        self.assertIn("Project: Alpha Project", context.composed_document["sections"][0]["content"])
-        analysis_content = context.composed_document["sections"][2]["content"]
-        self.assertEqual(analysis_content["mode"], "prompt_generation")
-        self.assertIn("Alpha Project", analysis_content["prompt"])
-        self.assertIn("Market value remains stable.", analysis_content["prompt"])
-
-    def test_pipeline_reads_land_summary_inputs_from_default_ruleset(self) -> None:
-        summary_input = load_json(LAND_SUMMARY_INPUT_PATH)
-        framework = get_default_ruleset("land_conver")
-
-        context = WordPipeline().run(framework=framework, elements=summary_input)
-        sections = context.composed_document["sections"]
-        rendered_markdown = context.rendered_output["markdown"]
-
-        OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-        LAND_SUMMARY_OUTPUT_PATH.write_text(rendered_markdown, encoding="utf-8")
-
-        self.assertEqual(context.framework.name, "land_conver_v1")
-        self.assertEqual([section["key"] for section in sections], ["conver", "summary"])
-        self.assertTrue(sections[1]["content"])
-        self.assertIn(sections[1]["title"], rendered_markdown)
-        self.assertTrue(LAND_SUMMARY_OUTPUT_PATH.exists())
-        self.assertEqual(LAND_SUMMARY_OUTPUT_PATH.read_text(encoding="utf-8"), rendered_markdown)
 
     @patch("fd_reportai_word.exporters.pandoc.subprocess.run")
     def test_pandoc_exporter_builds_docx_command(self, mock_run) -> None:

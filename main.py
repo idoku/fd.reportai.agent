@@ -11,7 +11,8 @@ PACKAGE_SRC = ROOT / "packages" / "fd-reportai-word" / "src"
 if str(PACKAGE_SRC) not in sys.path:
     sys.path.insert(0, str(PACKAGE_SRC))
 
-from fd_reportai_word import WordContext, WordPipeline, get_default_ruleset  # noqa: E402
+from fd_reportai_word import LLMLocator, WordContext, WordPipeline, get_default_ruleset  # noqa: E402
+from fd_reportai_word.llm.config import env_float, env_str, load_dotenv_if_available  # noqa: E402
 
 
 def _load_payload(path: Path) -> dict[str, object]:
@@ -33,13 +34,22 @@ def _build_context(payload: dict[str, object], ruleset_name: str) -> WordContext
 
 
 def main() -> None:
+    load_dotenv_if_available(ROOT)
+
     input_path = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "inputs" / "land_summary_input.json"
     output_path = Path(sys.argv[2]) if len(sys.argv) > 2 else ROOT / "inputs" / "_outputs" / "report.md"
-    ruleset_name = sys.argv[3] if len(sys.argv) > 3 else "land_conver"
+    ruleset_name = sys.argv[3] if len(sys.argv) > 3 else "ruleset_land"
 
     payload = _load_payload(input_path)
     context = _build_context(payload, ruleset_name)
-    result = WordPipeline().run(context=context)
+    locator = LLMLocator(
+        provider=env_str("FD_REPORTAI_LLM_PROVIDER", "mock"),
+        model=env_str("FD_REPORTAI_LLM_MODEL"),
+        api_key=env_str("OPENAI_API_KEY"),
+        base_url=env_str("OPENAI_BASE_URL"),
+        temperature=env_float("TEMPERATURE", 0.3),
+    )
+    result = WordPipeline(locator=locator).run(context=context)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(result.rendered_output["markdown"], encoding="utf-8")

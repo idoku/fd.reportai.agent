@@ -1,3 +1,3 @@
-from .base import BasePlanner, NoopPlanner
+from .base import BasePlanner, DefaultPlanner, NoopPlanner
 
-__all__ = ["BasePlanner", "NoopPlanner"]
+__all__ = ["BasePlanner", "DefaultPlanner", "NoopPlanner"]

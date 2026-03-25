@@ -7,6 +7,7 @@ from ..domain import (
     BlockTask,
     DataContext,
     DefinitionInput,
+    ElementValue,
     GenerationPlan,
     PlannedSection,
     ResolvedInput,
@@ -56,8 +57,7 @@ class DefaultBlocker:
     ) -> list[ResolvedInput]:
         resolved_inputs: list[ResolvedInput] = []
         for definition in definitions:
-            source_key = definition.source_key or definition.key
-            element = data_context.values.get(source_key)
+            source_key, element = self._find_element_for_definition(definition, data_context)
             has_value = element is not None
             used_default = not has_value and definition.default_value is not None
             resolved_inputs.append(
@@ -72,6 +72,93 @@ class DefaultBlocker:
                 )
             )
         return resolved_inputs
+
+    def _find_element_for_definition(
+        self,
+        definition: DefinitionInput,
+        data_context: DataContext,
+    ) -> tuple[str, ElementValue | None]:
+        candidate_keys = [definition.source_key or definition.key, *definition.aliases]
+        for candidate_key in candidate_keys:
+            element = data_context.values.get(candidate_key)
+            if element is not None:
+                return candidate_key, element
+            extracted = self._extract_element_from_path(candidate_key, data_context)
+            if extracted is not None:
+                transformed = self._apply_transform(extracted, definition.options.get("transform"))
+                return candidate_key, ElementValue(value=transformed)
+        return definition.source_key or definition.key, None
+
+    def _extract_element_from_path(self, path: str, data_context: DataContext) -> object | None:
+        if "." not in path and "[" not in path:
+            return None
+        current: object | None = data_context.values
+        for part in path.split("."):
+            if current is None:
+                return None
+            current = self._resolve_path_part(current, part)
+        if isinstance(current, ElementValue):
+            return current.value
+        return current
+
+    def _resolve_path_part(self, current: object, part: str) -> object | None:
+        token = part.strip()
+        if not token:
+            return current
+        while token:
+            if "[" in token:
+                field_name, rest = token.split("[", 1)
+                if field_name:
+                    current = self._resolve_mapping_value(current, field_name)
+                index_text, remainder = rest.split("]", 1)
+                if not isinstance(current, list):
+                    return None
+                try:
+                    current = current[int(index_text)]
+                except (ValueError, IndexError):
+                    return None
+                token = remainder
+            else:
+                current = self._resolve_mapping_value(current, token)
+                token = ""
+        return current
+
+    def _resolve_mapping_value(self, current: object, key: str) -> object | None:
+        if isinstance(current, ElementValue):
+            current = current.value
+        if isinstance(current, dict):
+            return current.get(key)
+        return None
+
+    def _apply_transform(self, value: object | None, transform: object) -> object | None:
+        if value is None or transform is None:
+            return value
+        if transform == "cn_date":
+            return self._to_chinese_date(str(value))
+        raise ValueError(f"Unsupported transform: {transform}.")
+
+    def _to_chinese_date(self, value: str) -> str:
+        import re
+
+        match = re.fullmatch(r"\s*(\d{4})年(\d{1,2})月(\d{1,2})日\s*", value)
+        if not match:
+            return value
+        year, month, day = match.groups()
+        digits = {"0": "〇", "1": "一", "2": "二", "3": "三", "4": "四", "5": "五", "6": "六", "7": "七", "8": "八", "9": "九"}
+        return f"{''.join(digits[ch] for ch in year)}年{self._to_chinese_number(int(month))}月{self._to_chinese_number(int(day))}日"
+
+    def _to_chinese_number(self, value: int) -> str:
+        digits = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"]
+        if value < 10:
+            return digits[value]
+        if value == 10:
+            return "十"
+        if value < 20:
+            return "十" + digits[value % 10]
+        tens, ones = divmod(value, 10)
+        if ones == 0:
+            return digits[tens] + "十"
+        return digits[tens] + "十" + digits[ones]
 
     def _collect_blocked_items(self, sections: list[PlannedSection]) -> list[dict[str, str]]:
         blocked_items: list[dict[str, str]] = []

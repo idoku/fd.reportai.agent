@@ -12,6 +12,7 @@ GeneratorMode = str
 class DefinitionInput:
     key: str
     source_key: str | None = None
+    aliases: list[str] = field(default_factory=list)
     required: bool = True
     default_value: Any = None
     options: dict[str, Any] = field(default_factory=dict)

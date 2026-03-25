@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_SRC = ROOT / "packages" / "fd-reportai-word" / "src"
 INPUTS_DIR = ROOT / "inputs"
 OUTPUTS_DIR = INPUTS_DIR / "_outputs"
-INPUT_JSON_PATH = INPUTS_DIR / "land_cover_input.json"
+INPUT_JSON_PATH = INPUTS_DIR / "land_input.json"
 OUTPUT_MARKDOWN_PATH = OUTPUTS_DIR / "land_cover.md"
 
 if str(PACKAGE_SRC) not in sys.path:
@@ -57,14 +57,21 @@ class TestLandCoverPipeline(unittest.TestCase):
         self.assertEqual(result.validation_errors, [])
         self.assertEqual(cover_block.trace.data_snapshot_id, "cover-snapshot-1")
         self.assertIn("# 土地估价报告", cover_text)
-        self.assertIn("项目名称：长沙银行股份有限公司抵押价值评估项目", cover_text)
-        self.assertIn("委托方：湖南经典房地产评估咨询有限公司", cover_text)
-        self.assertIn("报告编号：湘经评估（2025）字第03411A号", cover_text)
-        self.assertIn("提交日期：二〇二五年十二月十六日", cover_text)
+        self.assertIn("项目名称：", cover_text)
+        self.assertIn("长沙银行股份有限公司", cover_text)
+        self.assertIn("冷水江市创新实业有限公司", cover_text)
+        self.assertIn("冷水江市城东生态城资江大道东侧", cover_text)
+        self.assertIn("二宗", cover_text)
+        self.assertIn("抵押贷款", cover_text)
+        self.assertIn("委托方：长沙银行股份有限公司", cover_text)
+        self.assertIn("报告编号：湘经典（2025）（估）字第常土003912A号", cover_text)
+        self.assertIn("提交日期：二〇二五年十二月十日", cover_text)
         self.assertIn("# 土地估价报告", rendered_markdown)
         self.assertIn("## 封面", rendered_markdown)
-        self.assertIn("项目名称：长沙银行股份有限公司抵押价值评估项目", rendered_markdown)
-        self.assertIn("委托方：湖南经典房地产评估咨询有限公司", rendered_markdown)
+        self.assertIn("项目名称：", rendered_markdown)
+        self.assertIn("长沙银行股份有限公司", rendered_markdown)
+        self.assertIn("冷水江市创新实业有限公司", rendered_markdown)
+        self.assertIn("委托方：长沙银行股份有限公司", rendered_markdown)
         self.assertTrue(OUTPUT_MARKDOWN_PATH.exists())
         self.assertEqual(OUTPUT_MARKDOWN_PATH.read_text(encoding="utf-8"), rendered_markdown)
 

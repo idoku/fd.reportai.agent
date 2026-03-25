@@ -137,6 +137,81 @@ class TestFdReportAiWord(unittest.TestCase):
         self.assertEqual(context.blocked_items, [])
         self.assertEqual(context.validation_errors, [])
 
+    def test_computed_field_supports_fixed_and_extract_modes(self) -> None:
+        cover_fragment = ReportSectionConfig(
+            key="cover",
+            title="Cover",
+            block_mode="template_fill",
+            template="Title: {report_title}\nClient: {client_name}\nDate: {submit_date}",
+            elements=[
+                SectionElementConfig(key="report_title"),
+                SectionElementConfig(key="client_name"),
+                SectionElementConfig(key="submit_date"),
+            ],
+        )
+
+        framework = WordPipelineConfig(
+            title="Extract Report",
+            computed_fields=[
+                ComputedFieldConfig(
+                    key="report_title",
+                    mode="fixed",
+                    options={"value": "Land Report"},
+                ),
+                ComputedFieldConfig(
+                    key="client_name",
+                    mode="extract",
+                    options={"path": "client.name"},
+                ),
+                ComputedFieldConfig(
+                    key="submit_date",
+                    mode="extract",
+                    options={"path": "project.date", "transform": "cn_date"},
+                ),
+            ],
+            sections=[cover_fragment],
+        )
+
+        context = WordPipeline().run(
+            framework=framework,
+            elements={
+                "client": {"name": "Company A"},
+                "project": {"date": "2025年12月10日"},
+            },
+        )
+
+        self.assertEqual(
+            context.composed_document["sections"][0]["content"],
+            "Title: Land Report\nClient: Company A\nDate: 二〇二五年十二月十日",
+        )
+        self.assertEqual(context.blocked_items, [])
+        self.assertEqual(context.validation_errors, [])
+
+    def test_section_element_alias_reads_alternate_input_key(self) -> None:
+        cover_fragment = ReportSectionConfig(
+            key="cover",
+            title="Cover",
+            block_mode="template_fill",
+            template="Client: {委托方}",
+            elements=[
+                SectionElementConfig(key="委托方", aliases=["委托方名称"]),
+            ],
+        )
+
+        framework = WordPipelineConfig(
+            title="Alias Report",
+            sections=[cover_fragment],
+        )
+
+        context = WordPipeline().run(
+            framework=framework,
+            elements={"委托方名称": "长沙银行股份有限公司"},
+        )
+
+        self.assertEqual(context.composed_document["sections"][0]["content"], "Client: 长沙银行股份有限公司")
+        self.assertEqual(context.blocked_items, [])
+        self.assertEqual(context.validation_errors, [])
+
     @patch("fd_reportai_word.exporters.pandoc.subprocess.run")
     def test_pandoc_exporter_builds_docx_command(self, mock_run) -> None:
         exporter = PandocDocxExporter()

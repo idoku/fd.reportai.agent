@@ -203,6 +203,19 @@ class DefaultComposer:
         computed_field: ComputedFieldDefinition,
         data_context: DataContext,
     ) -> object | None:
+        if computed_field.mode == "fixed":
+            return computed_field.options.get("value")
+
+        if computed_field.mode == "extract":
+            path = computed_field.options.get("path")
+            if not isinstance(path, str) or not path.strip():
+                raise ValueError(f"Computed field {computed_field.key} requires options['path'] for extract mode.")
+            value = self._extract_from_path(data_context, path)
+            transform = computed_field.options.get("transform")
+            if transform is not None:
+                value = self._apply_transform(value, transform)
+            return value
+
         if computed_field.mode != "llm_text":
             raise ValueError(f"Unsupported computed field mode: {computed_field.mode}.")
 
@@ -214,8 +227,7 @@ class DefaultComposer:
         if computed_field.input_blocks:
             variables: dict[str, object] = {}
             for input_definition in computed_field.input_blocks:
-                source_key = input_definition.source_key or input_definition.key
-                element = data_context.values.get(source_key)
+                _, element = self._find_element_for_definition(input_definition, data_context)
                 if element is not None:
                     variables[input_definition.key] = element.value
                 elif input_definition.default_value is not None:
@@ -234,6 +246,88 @@ class DefaultComposer:
         if data_context.metadata.get("model_version") is None:
             data_context.metadata["model_version"] = self._extract_model_name(response)
         return self._strip_text_result(response_text)
+
+    def _extract_from_path(self, data_context: DataContext, path: str) -> object | None:
+        current: object | None = data_context.values
+        for part in path.split("."):
+            if current is None:
+                return None
+            current = self._resolve_path_part(current, part)
+        if isinstance(current, ElementValue):
+            return current.value
+        return current
+
+    def _resolve_path_part(self, current: object, part: str) -> object | None:
+        token = part.strip()
+        if not token:
+            return current
+
+        while token:
+            if "[" in token:
+                field_name, rest = token.split("[", 1)
+                if field_name:
+                    current = self._resolve_mapping_value(current, field_name)
+                index_text, remainder = rest.split("]", 1)
+                if not isinstance(current, list):
+                    return None
+                try:
+                    current = current[int(index_text)]
+                except (ValueError, IndexError):
+                    return None
+                token = remainder
+            else:
+                current = self._resolve_mapping_value(current, token)
+                token = ""
+        return current
+
+    def _resolve_mapping_value(self, current: object, key: str) -> object | None:
+        if isinstance(current, ElementValue):
+            current = current.value
+        if isinstance(current, dict):
+            return current.get(key)
+        return None
+
+    def _apply_transform(self, value: object | None, transform: object) -> object | None:
+        if value is None:
+            return None
+        if transform == "cn_date":
+            return self._to_chinese_date(str(value))
+        raise ValueError(f"Unsupported transform: {transform}.")
+
+    def _find_element_for_definition(
+        self,
+        definition,
+        data_context: DataContext,
+    ) -> tuple[str, ElementValue | None]:
+        candidate_keys = [definition.source_key or definition.key, *definition.aliases]
+        for candidate_key in candidate_keys:
+            element = data_context.values.get(candidate_key)
+            if element is not None:
+                return candidate_key, element
+        return definition.source_key or definition.key, None
+
+    def _to_chinese_date(self, value: str) -> str:
+        import re
+
+        match = re.fullmatch(r"\s*(\d{4})年(\d{1,2})月(\d{1,2})日\s*", value)
+        if not match:
+            return value
+        year, month, day = match.groups()
+        digits = {"0": "〇", "1": "一", "2": "二", "3": "三", "4": "四", "5": "五", "6": "六", "7": "七", "8": "八", "9": "九"}
+        return f"{''.join(digits[ch] for ch in year)}年{self._to_chinese_number(int(month))}月{self._to_chinese_number(int(day))}日"
+
+    def _to_chinese_number(self, value: int) -> str:
+        digits = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"]
+        if value < 10:
+            return digits[value]
+        if value == 10:
+            return "十"
+        if value < 20:
+            return "十" + digits[value % 10]
+        tens, ones = divmod(value, 10)
+        if ones == 0:
+            return digits[tens] + "十"
+        return digits[tens] + "十" + digits[ones]
 
     def _strip_text_result(self, text: str) -> str:
         candidate = text.strip()

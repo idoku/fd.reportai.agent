@@ -64,4 +64,31 @@ LAND_COMPUTED_FIELDS = [
             SectionElementConfig(key="地价定义分项设定", required=True),
         ],
     ),
+    ComputedFieldConfig(
+        key="估价结果描述",
+        mode="llm_text",
+        prompt_file="land/valuation_result_description_prompt.txt",
+        input_blocks=[
+            SectionElementConfig(key="项目信息", required=True),
+            SectionElementConfig(key="估价对象", required=True),
+            SectionElementConfig(key="委托估价方", required=True),
+            SectionElementConfig(key="地价定义分项设定", required=False),
+        ],
+    ),
+    ComputedFieldConfig(
+        key="估价结果说明",
+        mode="llm_text",
+        prompt_file="land/valuation_result_prompt.txt",
+        input_blocks=[
+            SectionElementConfig(key="估价对象", required=True),
+        ],
+    ),
+    ComputedFieldConfig(
+        key="估价师签字",
+        mode="llm_text",
+        prompt_file="land/valuation_signatures_prompt.txt",
+        input_blocks=[
+            SectionElementConfig(key="估价师", required=True),
+        ],
+    ),
 ]

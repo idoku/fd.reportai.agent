@@ -38,7 +38,10 @@ class TestLandCoverPipeline(unittest.TestCase):
         result = WordPipeline(locator=locator).run(
             framework=get_default_ruleset("ruleset_land"),
             elements=elements,
-            metadata={"data_snapshot_id": "cover-snapshot-1"},
+            metadata={
+                "data_snapshot_id": "cover-snapshot-1",
+                "input_base_dir": str(INPUT_JSON_PATH.parent),
+            },
         )
 
         rendered_markdown = result.rendered_output["markdown"]
@@ -52,6 +55,7 @@ class TestLandCoverPipeline(unittest.TestCase):
         self.assertEqual(result.blocked_items, [])
         self.assertEqual(result.validation_errors, [])
         self.assertEqual(OUTPUT_MARKDOWN_PATH.read_text(encoding="utf-8"), rendered_markdown)
+        self.assertIn("法人签名.png", rendered_markdown)
 
 
 if __name__ == "__main__":

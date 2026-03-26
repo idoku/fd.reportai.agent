@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from pathlib import Path
 import re
 
 from ..context import WordContext
@@ -83,13 +84,13 @@ class DefaultBlocker:
         for candidate_key in candidate_keys:
             element = data_context.values.get(candidate_key)
             if element is not None:
-                return candidate_key, self._transform_element_value(element, definition)
+                return candidate_key, self._transform_element_value(element, definition, data_context)
 
         for candidate_key in candidate_keys:
             extracted = self._find_nested_value(data_context.values, candidate_key)
             if extracted is not None:
                 return candidate_key, ElementValue(
-                    value=self._apply_transform(extracted, definition.options.get("transform"))
+                    value=self._apply_transform(extracted, definition.options.get("transform"), data_context)
                 )
 
         return definition.source_key or definition.key, None
@@ -118,23 +119,48 @@ class DefaultBlocker:
 
         return None
 
-    def _transform_element_value(self, element: ElementValue, definition: DefinitionInput) -> ElementValue:
+    def _transform_element_value(
+        self,
+        element: ElementValue,
+        definition: DefinitionInput,
+        data_context: DataContext,
+    ) -> ElementValue:
         transform = definition.options.get("transform")
         if transform is None:
             return element
         return ElementValue(
-            value=self._apply_transform(element.value, transform),
+            value=self._apply_transform(element.value, transform, data_context),
             label=element.label,
             type=element.type,
             options=dict(element.options),
         )
 
-    def _apply_transform(self, value: object | None, transform: object) -> object | None:
+    def _apply_transform(self, value: object | None, transform: object, data_context: DataContext) -> object | None:
         if value is None or transform is None:
             return value
         if transform == "cn_date":
             return self._to_chinese_date(str(value))
+        if transform == "markdown_image":
+            return self._to_markdown_image(str(value), data_context)
         raise ValueError(f"Unsupported transform: {transform}.")
+
+    def _to_markdown_image(self, value: str, data_context: DataContext) -> str:
+        image_path = value.strip()
+        if not image_path:
+            return ""
+        resolved_path = self._resolve_media_path(image_path, data_context)
+        return f"![法定代表人签字](<{resolved_path}>)"
+
+    def _resolve_media_path(self, value: str, data_context: DataContext) -> str:
+        if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", value):
+            return value
+        candidate = Path(value)
+        if candidate.is_absolute():
+            return candidate.as_posix()
+        input_base_dir = data_context.metadata.get("input_base_dir")
+        if isinstance(input_base_dir, str) and input_base_dir.strip():
+            return (Path(input_base_dir) / candidate).resolve().as_posix()
+        return candidate.as_posix()
 
     def _to_chinese_date(self, value: str) -> str:
         match = re.fullmatch(r"\s*(\d{4})年(\d{1,2})月(\d{1,2})日\s*", value)

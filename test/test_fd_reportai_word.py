@@ -358,6 +358,132 @@ class TestFdReportAiWord(unittest.TestCase):
         self.assertEqual(context.blocked_items, [])
         self.assertEqual(context.validation_errors, [])
 
+    def test_llm_text_computed_field_renders_signatures_content(self) -> None:
+        llm = CountingModel("姓   名      土地估价师证书号      签     字\n\n唐跃坤           94180084\n\n王玉           2004430018")
+
+        summary_fragment = ReportSectionConfig(
+            key="summary",
+            title="Summary",
+            block_mode="template_fill",
+            template="{signatures}",
+            content_items=[
+                ContentItemConfig(
+                    key="signatures",
+                    template="{signatures}",
+                    elements=[SectionElementConfig(key="signatures")],
+                )
+            ],
+        )
+
+        framework = WordPipelineConfig(
+            title="Signature Report",
+            computed_fields=[
+                ComputedFieldConfig(
+                    key="signatures",
+                    mode="llm_text",
+                    prompt="请生成签字内容：\n{input}",
+                    input_blocks=[SectionElementConfig(key="估价师")],
+                )
+            ],
+            sections=[summary_fragment],
+        )
+
+        context = WordPipeline(llm=llm).run(
+            framework=framework,
+            elements={
+                "估价师": [
+                    {"姓名": "唐跃坤", "土地估价师证书号": "94180084"},
+                    {"姓名": "王玉", "土地估价师证书号": "2004430018"},
+                ]
+            },
+        )
+
+        self.assertEqual(
+            context.composed_document["sections"][0]["content"],
+            "姓   名      土地估价师证书号      签     字\n\n唐跃坤           94180084\n\n王玉           2004430018",
+        )
+        self.assertEqual(llm.calls, 1)
+        self.assertEqual(context.blocked_items, [])
+        self.assertEqual(context.validation_errors, [])
+
+    def test_section_element_markdown_image_transform_renders_image_reference(self) -> None:
+        summary_fragment = ReportSectionConfig(
+            key="summary",
+            title="Summary",
+            block_mode="template_fill",
+            template="{agency}",
+            content_items=[
+                ContentItemConfig(
+                    key="agency",
+                    template="签字：\n{signature}",
+                    elements=[
+                        SectionElementConfig(
+                            key="signature",
+                            aliases=["签字图片"],
+                            options={"transform": "markdown_image"},
+                        )
+                    ],
+                )
+            ],
+        )
+
+        framework = WordPipelineConfig(
+            title="Agency Report",
+            sections=[summary_fragment],
+        )
+
+        context = WordPipeline().run(
+            framework=framework,
+            elements={"签字图片": "https://example.com/signature.png"},
+        )
+
+        self.assertEqual(
+            context.composed_document["sections"][0]["content"],
+            "签字：\n![法定代表人签字](<https://example.com/signature.png>)",
+        )
+        self.assertEqual(context.blocked_items, [])
+        self.assertEqual(context.validation_errors, [])
+
+    def test_section_element_markdown_image_transform_resolves_relative_path(self) -> None:
+        summary_fragment = ReportSectionConfig(
+            key="summary",
+            title="Summary",
+            block_mode="template_fill",
+            template="{agency}",
+            content_items=[
+                ContentItemConfig(
+                    key="agency",
+                    template="{signature}",
+                    elements=[
+                        SectionElementConfig(
+                            key="signature",
+                            aliases=["签字图片"],
+                            options={"transform": "markdown_image"},
+                        )
+                    ],
+                )
+            ],
+        )
+
+        framework = WordPipelineConfig(
+            title="Agency Report",
+            sections=[summary_fragment],
+        )
+
+        context = WordPipeline().run(
+            framework=framework,
+            elements={"签字图片": "法人签名.png"},
+            metadata={"input_base_dir": str(ROOT / "inputs")},
+        )
+
+        expected_path = (ROOT / "inputs" / "法人签名.png").resolve().as_posix()
+        self.assertEqual(
+            context.composed_document["sections"][0]["content"],
+            f"![法定代表人签字](<{expected_path}>)",
+        )
+        self.assertEqual(context.blocked_items, [])
+        self.assertEqual(context.validation_errors, [])
+
     @patch("fd_reportai_word.exporters.pandoc.subprocess.run")
     def test_pandoc_exporter_builds_docx_command(self, mock_run) -> None:
         exporter = PandocDocxExporter()

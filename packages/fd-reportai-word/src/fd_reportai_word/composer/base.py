@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 import json
+import re
 
 from langchain_core.messages import HumanMessage
 
@@ -316,13 +318,13 @@ class DefaultComposer:
         if existing is not None:
             if transform is None:
                 return existing.value
-            return self._apply_transform(existing.value, transform)
+            return self._apply_transform(existing.value, transform, data_context)
         nested = self.blocker._find_nested_value(data_context.values, resolved.source_key)
         if nested is None:
             return None
         if transform is None:
             return nested
-        return self._apply_transform(nested, transform)
+        return self._apply_transform(nested, transform, data_context)
 
     def _compute_field_value(
         self,
@@ -339,7 +341,7 @@ class DefaultComposer:
             value = self._extract_from_path(data_context, path)
             transform = computed_field.options.get("transform")
             if transform is not None:
-                value = self._apply_transform(value, transform)
+                value = self._apply_transform(value, transform, data_context)
             return value
 
         if computed_field.mode not in {"llm_text", "llm_json"}:
@@ -351,13 +353,7 @@ class DefaultComposer:
 
         prompt_template = computed_field.prompt_template or ""
         if computed_field.input_blocks:
-            variables: dict[str, object] = {}
-            for input_definition in computed_field.input_blocks:
-                _, element = self._find_element_for_definition(input_definition, data_context)
-                if element is not None:
-                    variables[input_definition.key] = element.value
-                elif input_definition.default_value is not None:
-                    variables[input_definition.key] = input_definition.default_value
+            variables = self._get_computed_field_input_blocks(computed_field, data_context)
         else:
             variables = {key: element.value for key, element in data_context.values.items()}
         prompt = prompt_template.format_map(
@@ -415,11 +411,13 @@ class DefaultComposer:
             return current.get(key)
         return None
 
-    def _apply_transform(self, value: object | None, transform: object) -> object | None:
+    def _apply_transform(self, value: object | None, transform: object, data_context: DataContext) -> object | None:
         if value is None:
             return None
         if transform == "cn_date":
             return self._to_chinese_date(str(value))
+        if transform == "markdown_image":
+            return self._to_markdown_image(str(value), data_context)
         raise ValueError(f"Unsupported transform: {transform}.")
 
     def _find_element_for_definition(
@@ -433,6 +431,20 @@ class DefaultComposer:
             if element is not None:
                 return candidate_key, element
         return definition.source_key or definition.key, None
+
+    def _get_computed_field_input_blocks(
+        self,
+        computed_field: ComputedFieldDefinition,
+        data_context: DataContext,
+    ) -> dict[str, object]:
+        variables: dict[str, object] = {}
+        for input_definition in computed_field.input_blocks:
+            _, element = self._find_element_for_definition(input_definition, data_context)
+            if element is not None:
+                variables[input_definition.key] = element.value
+            elif input_definition.default_value is not None:
+                variables[input_definition.key] = input_definition.default_value
+        return variables
 
     def _to_chinese_date(self, value: str) -> str:
         import re
@@ -456,6 +468,24 @@ class DefaultComposer:
         if ones == 0:
             return digits[tens] + "十"
         return digits[tens] + "十" + digits[ones]
+
+    def _to_markdown_image(self, value: str, data_context: DataContext) -> str:
+        image_path = value.strip()
+        if not image_path:
+            return ""
+        resolved_path = self._resolve_media_path(image_path, data_context)
+        return f"![法定代表人签字](<{resolved_path}>)"
+
+    def _resolve_media_path(self, value: str, data_context: DataContext) -> str:
+        if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", value):
+            return value
+        candidate = Path(value)
+        if candidate.is_absolute():
+            return candidate.as_posix()
+        input_base_dir = data_context.metadata.get("input_base_dir")
+        if isinstance(input_base_dir, str) and input_base_dir.strip():
+            return (Path(input_base_dir) / candidate).resolve().as_posix()
+        return candidate.as_posix()
 
     def _strip_text_result(self, text: str) -> str:
         candidate = text.strip()

@@ -50,7 +50,7 @@ LAND_SECTIONS = [
                 template_file="land/land_summary_value.md",
                 elements=[
                     SectionElementConfig(key="估价对象界定"),
-                    SectionElementConfig(key="估价期日",aliases=["查勘完成日期"]),
+                    SectionElementConfig(key="估价期日", aliases=["查勘完成日期"], options={"transform": "cn_date"}),
                     SectionElementConfig(key="期日设定"),
                     SectionElementConfig(key="用途设定"),
                     SectionElementConfig(key="权利类型设定"),
@@ -59,6 +59,34 @@ LAND_SECTIONS = [
                     SectionElementConfig(key="开发程度设定"),
                     SectionElementConfig(key="他项权利设定"),
                     SectionElementConfig(key="价格内涵总结"),
+                ],
+            ),
+            ContentItemConfig(
+                key="估价结果",
+                template_file="land/land_summary_result.md",
+                elements=[
+                    SectionElementConfig(key="估价结果描述"),
+                    SectionElementConfig(key="估价结果说明"),
+                ],
+            ),
+            ContentItemConfig(
+                key="估价师签字",
+                template_file="land/land_summary_signatures.md",
+                elements=[
+                    SectionElementConfig(key="估价师签字"),
+                ],
+            ),
+            ContentItemConfig(
+                key="土地估价机构",
+                template_file="land/land_summary_agency.md",
+                elements=[
+                    SectionElementConfig(
+                        key="估价机构法定代表人签字",
+                        aliases=["法定代表人签字", "法定代表人签字图片", "法人签名"],
+                        options={"transform": "markdown_image"},
+                    ),
+                    SectionElementConfig(key="土地估价机构", aliases=["估价机构"]),
+                    SectionElementConfig(key="估价日期", aliases=["报告完成日期"], options={"transform": "cn_date"}),
                 ],
             ),
         ],

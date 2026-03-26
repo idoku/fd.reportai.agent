@@ -24,6 +24,9 @@ LAND_SECTIONS = [
         template_file="land/land_summary.md",
         elements=[
             SectionElementConfig(key="项目名称"),
+            SectionElementConfig(key="估价期日", aliases=["查勘完成日期"], options={"transform": "cn_date"}),
+            SectionElementConfig(key="估价日期", aliases=["报告完成日期"], options={"transform": "cn_date"}),
+            
         ],
         content_items=[
             ContentItemConfig(
@@ -40,7 +43,7 @@ LAND_SECTIONS = [
                 key="估价目的",
                 template_file="land/land_summary_purpose.md",
                 elements=[
-                    SectionElementConfig(key="估价目的"),
+                    SectionElementConfig(key="估价目的描述"),
                 ],
             ),
         ],

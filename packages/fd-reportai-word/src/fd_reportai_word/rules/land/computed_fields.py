@@ -23,4 +23,14 @@ LAND_COMPUTED_FIELDS = [
             SectionElementConfig(key="委托估价方", required=True),
         ],
     ),
+     ComputedFieldConfig(
+        key="估价目的描述",
+        mode="llm_text",
+        prompt_file="land/valuation_purpose_prompt.txt",
+        input_blocks=[
+            SectionElementConfig(key="估价对象", required=True),
+            SectionElementConfig(key="委托估价方", required=True),
+            SectionElementConfig(key="估价依据", required=True),
+        ],
+    ),
 ]

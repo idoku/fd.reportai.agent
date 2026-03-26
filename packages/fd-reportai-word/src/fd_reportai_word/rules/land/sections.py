@@ -89,6 +89,45 @@ LAND_SECTIONS = [
                     SectionElementConfig(key="估价日期", aliases=["报告完成日期"], options={"transform": "cn_date"}),
                 ],
             ),
+            ContentItemConfig(
+                key="结果一览表",
+                template_file="land/land_summary_table.md",
+                elements=[
+                    SectionElementConfig(key="估价机构", aliases=["土地估价机构"]),
+                    SectionElementConfig(key="估价报告编号", source_key="报告编号"),
+                    SectionElementConfig(key="估价期日", aliases=["查勘完成日期"]),
+                    SectionElementConfig(key="估价目的"),
+                    SectionElementConfig(
+                        key="估价期日的土地使用权性质",
+                        aliases=["土地使用权性质", "权利性质"],
+                    ),
+                    SectionElementConfig(key="结果一览表表格"),
+                    SectionElementConfig(
+                        key="结果一览表备注",
+                        required=False,
+                        default_value="“五通”为通路、通电、通讯、供水、排水。",
+                    ),
+                    SectionElementConfig(
+                        key="限定条件",
+                        required=False,
+                        default_value="",
+                        options={"transform": "numbered_paragraphs"},
+                    ),
+                    SectionElementConfig(
+                        key="其他说明事项",
+                        required=False,
+                        default_value="",
+                        options={"transform": "numbered_paragraphs"},
+                    ),
+                    SectionElementConfig(key="落款机构", source_key="估价机构", aliases=["土地估价机构"]),
+                    SectionElementConfig(
+                        key="落款日期",
+                        source_key="报告完成日期",
+                        aliases=["估价日期"],
+                        options={"transform": "cn_date"},
+                    ),
+                ],
+            ),
         ],
     ),
 ]

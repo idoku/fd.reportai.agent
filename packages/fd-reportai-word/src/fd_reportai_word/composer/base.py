@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from pathlib import Path
-
 import json
-import re
 
 from langchain_core.messages import HumanMessage
 
@@ -23,6 +20,7 @@ from ..domain import (
 )
 from ..domain.payloads import ElementValue
 from ..llm import LLMLocator, SupportsInvoke
+from ..transforms import apply_transform
 
 
 class BaseComposer(ABC):
@@ -412,13 +410,7 @@ class DefaultComposer:
         return None
 
     def _apply_transform(self, value: object | None, transform: object, data_context: DataContext) -> object | None:
-        if value is None:
-            return None
-        if transform == "cn_date":
-            return self._to_chinese_date(str(value))
-        if transform == "markdown_image":
-            return self._to_markdown_image(str(value), data_context)
-        raise ValueError(f"Unsupported transform: {transform}.")
+        return apply_transform(value, transform, data_context.metadata)
 
     def _find_element_for_definition(
         self,
@@ -445,47 +437,6 @@ class DefaultComposer:
             elif input_definition.default_value is not None:
                 variables[input_definition.key] = input_definition.default_value
         return variables
-
-    def _to_chinese_date(self, value: str) -> str:
-        import re
-
-        match = re.fullmatch(r"\s*(\d{4})年(\d{1,2})月(\d{1,2})日\s*", value)
-        if not match:
-            return value
-        year, month, day = match.groups()
-        digits = {"0": "〇", "1": "一", "2": "二", "3": "三", "4": "四", "5": "五", "6": "六", "7": "七", "8": "八", "9": "九"}
-        return f"{''.join(digits[ch] for ch in year)}年{self._to_chinese_number(int(month))}月{self._to_chinese_number(int(day))}日"
-
-    def _to_chinese_number(self, value: int) -> str:
-        digits = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"]
-        if value < 10:
-            return digits[value]
-        if value == 10:
-            return "十"
-        if value < 20:
-            return "十" + digits[value % 10]
-        tens, ones = divmod(value, 10)
-        if ones == 0:
-            return digits[tens] + "十"
-        return digits[tens] + "十" + digits[ones]
-
-    def _to_markdown_image(self, value: str, data_context: DataContext) -> str:
-        image_path = value.strip()
-        if not image_path:
-            return ""
-        resolved_path = self._resolve_media_path(image_path, data_context)
-        return f"![法定代表人签字](<{resolved_path}>)"
-
-    def _resolve_media_path(self, value: str, data_context: DataContext) -> str:
-        if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", value):
-            return value
-        candidate = Path(value)
-        if candidate.is_absolute():
-            return candidate.as_posix()
-        input_base_dir = data_context.metadata.get("input_base_dir")
-        if isinstance(input_base_dir, str) and input_base_dir.strip():
-            return (Path(input_base_dir) / candidate).resolve().as_posix()
-        return candidate.as_posix()
 
     def _strip_text_result(self, text: str) -> str:
         candidate = text.strip()

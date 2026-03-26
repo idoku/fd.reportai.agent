@@ -91,4 +91,12 @@ LAND_COMPUTED_FIELDS = [
             SectionElementConfig(key="估价师", required=True),
         ],
     ),
+    ComputedFieldConfig(
+        key="结果一览表表格",
+        mode="extract",
+        options={
+            "path": "估价对象",
+            "transform": "land_result_table",
+        },
+    ),
 ]

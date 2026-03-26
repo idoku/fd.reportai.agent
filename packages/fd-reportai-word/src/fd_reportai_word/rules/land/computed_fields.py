@@ -23,7 +23,7 @@ LAND_COMPUTED_FIELDS = [
             SectionElementConfig(key="委托估价方", required=True),
         ],
     ),
-     ComputedFieldConfig(
+    ComputedFieldConfig(
         key="估价目的描述",
         mode="llm_text",
         prompt_file="land/valuation_purpose_prompt.txt",
@@ -31,6 +31,37 @@ LAND_COMPUTED_FIELDS = [
             SectionElementConfig(key="估价对象", required=True),
             SectionElementConfig(key="委托估价方", required=True),
             SectionElementConfig(key="估价依据", required=True),
+        ],
+    ),
+    ComputedFieldConfig(
+        key="估价对象界定",
+        mode="llm_text",
+        prompt_file="land/valuation_object_scope_prompt.txt",
+        input_blocks=[
+            SectionElementConfig(key="项目信息", required=True),
+            SectionElementConfig(key="估价对象", required=True),
+            SectionElementConfig(key="委托估价方", required=False),
+        ],
+    ),
+    ComputedFieldConfig(
+        key="地价定义分项设定",
+        mode="llm_json",
+        prompt_file="land/valuation_definition_items_prompt.txt",
+        input_blocks=[
+            SectionElementConfig(key="项目信息", required=True),
+            SectionElementConfig(key="估价对象", required=True),
+            SectionElementConfig(key="委托估价方", required=False),
+            SectionElementConfig(key="估价依据", required=False),
+        ],
+    ),
+    ComputedFieldConfig(
+        key="价格内涵总结",
+        mode="llm_text",
+        prompt_file="land/valuation_connotation_prompt.txt",
+        input_blocks=[
+            SectionElementConfig(key="项目信息", required=True),
+            SectionElementConfig(key="估价对象", required=True),
+            SectionElementConfig(key="地价定义分项设定", required=True),
         ],
     ),
 ]

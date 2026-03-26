@@ -188,6 +188,25 @@ class DefaultComposer:
         data_context: DataContext,
     ) -> str:
         variables = self._resolve_content_item_variables(content_item.inputs, data_context)
+        if content_item.prompt_template:
+            prompt = content_item.prompt_template.format_map(
+                _SafeFormatDict(
+                    {
+                        "input": json.dumps(variables, ensure_ascii=False, indent=2),
+                    }
+                )
+            )
+            llm = self._resolve_llm()
+            if llm is None:
+                return prompt
+            response = llm.invoke([HumanMessage(content=prompt)])
+            response_text = self._extract_content(response)
+            if data_context.metadata.get("model_version") is None:
+                data_context.metadata["model_version"] = self._extract_model_name(response)
+            if content_item.template:
+                generated_fields = self._parse_json_object(response_text)
+                return content_item.template.format_map(_SafeFormatDict(generated_fields))
+            return self._strip_text_result(response_text)
         template = content_item.template or ""
         return template.format_map(_SafeFormatDict(variables))
 
@@ -217,21 +236,93 @@ class DefaultComposer:
                 resolved.used_default = False
                 continue
             computed_field = self.computed_fields.get(resolved.source_key)
-            if computed_field is None:
+            if computed_field is not None:
+                value = self._get_or_compute_field_value(computed_field, data_context)
+                if value is None:
+                    continue
+                resolved.value = value
+                resolved.has_value = True
+                resolved.used_default = False
                 continue
-            value = self._compute_field_value(computed_field, data_context)
-            if value is None:
+            if self._resolve_from_json_computed_fields(resolved, data_context):
                 continue
-            data_context.values[computed_field.key] = ElementValue(
-                value=value,
-                options={
-                    "computed": True,
-                    "mode": computed_field.mode,
-                },
+
+    def _get_or_compute_field_value(
+        self,
+        computed_field: ComputedFieldDefinition,
+        data_context: DataContext,
+    ) -> object | None:
+        existing = data_context.values.get(computed_field.key)
+        if existing is not None:
+            return existing.value
+        value = self._compute_field_value(computed_field, data_context)
+        if value is None:
+            return None
+        self._store_computed_field_value(computed_field, value, data_context)
+        return value
+
+    def _store_computed_field_value(
+        self,
+        computed_field: ComputedFieldDefinition,
+        value: object,
+        data_context: DataContext,
+    ) -> None:
+        element_options = {
+            "computed": True,
+            "mode": computed_field.mode,
+        }
+        data_context.values[computed_field.key] = ElementValue(
+            value=value,
+            options=dict(element_options),
+        )
+        if not isinstance(value, dict):
+            return
+        for child_key, child_value in value.items():
+            if child_key in data_context.values:
+                continue
+            child_options = dict(element_options)
+            child_options["computed_parent"] = computed_field.key
+            data_context.values[child_key] = ElementValue(
+                value=child_value,
+                options=child_options,
             )
+
+    def _resolve_from_json_computed_fields(self, resolved, data_context: DataContext) -> bool:
+        value = self._find_resolved_value(resolved, data_context)
+        if value is not None:
             resolved.value = value
             resolved.has_value = True
             resolved.used_default = False
+            return True
+
+        for computed_field in self.computed_fields.values():
+            if computed_field.mode != "llm_json":
+                continue
+            value = self._get_or_compute_field_value(computed_field, data_context)
+            if value is None:
+                continue
+            matched_value = self._find_resolved_value(resolved, data_context)
+            if matched_value is None:
+                continue
+            resolved.value = matched_value
+            resolved.has_value = True
+            resolved.used_default = False
+            return True
+        return False
+
+    def _find_resolved_value(self, resolved, data_context: DataContext) -> object | None:
+        existing = data_context.values.get(resolved.source_key)
+        transform = resolved.options.get("transform")
+        if existing is not None:
+            if transform is None:
+                return existing.value
+            return self._apply_transform(existing.value, transform)
+        nested = self.blocker._find_nested_value(data_context.values, resolved.source_key)
+        if nested is None:
+            return None
+        if transform is None:
+            return nested
+        return self._apply_transform(nested, transform)
 
     def _compute_field_value(
         self,
@@ -251,7 +342,7 @@ class DefaultComposer:
                 value = self._apply_transform(value, transform)
             return value
 
-        if computed_field.mode != "llm_text":
+        if computed_field.mode not in {"llm_text", "llm_json"}:
             raise ValueError(f"Unsupported computed field mode: {computed_field.mode}.")
 
         llm = self._resolve_llm()
@@ -280,6 +371,8 @@ class DefaultComposer:
         response_text = self._extract_content(response)
         if data_context.metadata.get("model_version") is None:
             data_context.metadata["model_version"] = self._extract_model_name(response)
+        if computed_field.mode == "llm_json":
+            return self._parse_json_object(response_text)
         return self._strip_text_result(response_text)
 
     def _extract_from_path(self, data_context: DataContext, path: str) -> object | None:

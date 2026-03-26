@@ -37,6 +37,7 @@ class BlockDefinition:
 class ContentItemDefinition:
     key: str
     template: str | None = None
+    prompt_template: str | None = None
     inputs: list[DefinitionInput] = field(default_factory=list)
     options: dict[str, Any] = field(default_factory=dict)
 

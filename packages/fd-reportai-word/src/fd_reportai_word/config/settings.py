@@ -34,13 +34,21 @@ class ContentItemConfig:
     key: str
     template: str | None = None
     template_file: str | None = None
+    prompt: str | None = None
+    prompt_file: str | None = None
     elements: list[SectionElementConfig] = field(default_factory=list)
     options: dict[str, Any] = field(default_factory=dict)
 
-    def to_definition(self, *, templates_dir: Path | None = None) -> ContentItemDefinition:
+    def to_definition(
+        self,
+        *,
+        templates_dir: Path | None = None,
+        prompts_dir: Path | None = None,
+    ) -> ContentItemDefinition:
         return ContentItemDefinition(
             key=self.key,
             template=self._resolve_template(templates_dir),
+            prompt_template=self._resolve_prompt(prompts_dir),
             inputs=list(self.elements),
             options=dict(self.options),
         )
@@ -55,6 +63,18 @@ class ContentItemConfig:
         return _load_text_with_includes(
             base_dir=templates_dir,
             relative_path=self.template_file,
+        )
+
+    def _resolve_prompt(self, prompts_dir: Path | None) -> str | None:
+        if self.prompt is not None:
+            return self.prompt
+        if self.prompt_file is None:
+            return None
+        if prompts_dir is None:
+            raise ValueError(f"prompts_dir is required for prompt_file={self.prompt_file!r}.")
+        return _load_text_with_includes(
+            base_dir=prompts_dir,
+            relative_path=self.prompt_file,
         )
 
 
@@ -127,7 +147,8 @@ class ReportSectionConfig:
             few_shots=list(self.few_shots),
             inputs=list(self.elements),
             content_items=[
-                content_item.to_definition(templates_dir=templates_dir) for content_item in self.content_items
+                content_item.to_definition(templates_dir=templates_dir, prompts_dir=prompts_dir)
+                for content_item in self.content_items
             ],
             compute_key=self.compute_key,
             options=dict(self.options),

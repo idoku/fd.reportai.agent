@@ -285,6 +285,79 @@ class TestFdReportAiWord(unittest.TestCase):
         self.assertEqual(context.blocked_items, [])
         self.assertEqual(context.validation_errors, [])
 
+    def test_section_content_item_supports_prompt_and_template(self) -> None:
+        llm = CountingModel('{"结论":"通过提示词生成的内容"}')
+
+        summary_fragment = ReportSectionConfig(
+            key="summary",
+            title="Summary",
+            block_mode="template_fill",
+            template="Result\n{说明}",
+            content_items=[
+                ContentItemConfig(
+                    key="说明",
+                    template="{结论}",
+                    prompt="请根据输入生成 JSON：{{\"结论\":\"...\"}}\n输入：{input}",
+                    elements=[SectionElementConfig(key="source")],
+                )
+            ],
+        )
+
+        framework = WordPipelineConfig(
+            title="Prompt Content Item Report",
+            sections=[summary_fragment],
+        )
+
+        context = WordPipeline(llm=llm).run(
+            framework=framework,
+            elements={"source": "demo"},
+        )
+
+        self.assertEqual(context.composed_document["sections"][0]["content"], "Result\n通过提示词生成的内容")
+        self.assertEqual(llm.calls, 1)
+        self.assertEqual(context.blocked_items, [])
+        self.assertEqual(context.validation_errors, [])
+
+    def test_llm_json_computed_field_exposes_child_fields_to_content_item(self) -> None:
+        llm = CountingModel('{"term":"30 years","usage":"residential"}')
+
+        summary_fragment = ReportSectionConfig(
+            key="summary",
+            title="Summary",
+            block_mode="template_fill",
+            template="{value_definition}",
+            content_items=[
+                ContentItemConfig(
+                    key="value_definition",
+                    template="Term: {term}\nUsage: {usage}",
+                    elements=[
+                        SectionElementConfig(key="term"),
+                        SectionElementConfig(key="usage"),
+                    ],
+                )
+            ],
+        )
+
+        framework = WordPipelineConfig(
+            title="JSON Computed Field Report",
+            computed_fields=[
+                ComputedFieldConfig(
+                    key="value_definition_items",
+                    mode="llm_json",
+                    prompt="Return JSON only.\n{input}",
+                    input_blocks=[],
+                )
+            ],
+            sections=[summary_fragment],
+        )
+
+        context = WordPipeline(llm=llm).run(framework=framework, elements={})
+
+        self.assertEqual(context.composed_document["sections"][0]["content"], "Term: 30 years\nUsage: residential")
+        self.assertEqual(llm.calls, 1)
+        self.assertEqual(context.blocked_items, [])
+        self.assertEqual(context.validation_errors, [])
+
     @patch("fd_reportai_word.exporters.pandoc.subprocess.run")
     def test_pandoc_exporter_builds_docx_command(self, mock_run) -> None:
         exporter = PandocDocxExporter()

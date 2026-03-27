@@ -15,4 +15,4 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-fd_reportai_word = ["templates/**/*.md", "prompts/**/*.md"]
+fd_reportai_word = ["templates/**/*.md", "prompts/**/*.txt"]

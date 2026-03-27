@@ -53,11 +53,14 @@ LAND_SECTIONS = [
             ),
             ContentItemConfig(
                 key="地价定义",
-                template_file="land/summary/4.value.template.md",
+                template_file="land/object_definition/_template.md",
                 elements=[
+                    SectionElementConfig(key="委托估价方", source_key="委托方", aliases=["委托方名称"]),
+                    SectionElementConfig(key="委托估价方联系人", source_key="联系人"),
+                    SectionElementConfig(key="委托估价方联系方式", source_key="联系方式"),
+                    SectionElementConfig(key="委托方与权利人关系"),
                     SectionElementConfig(key="估价对象界定"),
                     SectionElementConfig(key="估价期日", aliases=["查勘完成日期"], options={"transform": "cn_date"}),
-                    SectionElementConfig(key="期日设定"),
                     SectionElementConfig(key="用途设定"),
                     SectionElementConfig(key="权利类型设定"),
                     SectionElementConfig(key="年限设定"),
@@ -73,6 +76,20 @@ LAND_SECTIONS = [
                 elements=[
                     SectionElementConfig(key="估价结果描述"),
                     SectionElementConfig(key="估价结果说明"),
+                ],
+            ),
+            ContentItemConfig(
+                key="土地估价结果及其使用",
+                template_file="land/result_usage/_template.md",
+                elements=[
+                    SectionElementConfig(key="估价依据", required=False, default_value=""),
+                    SectionElementConfig(key="土地估价", source_key="估价结果描述", required=False, default_value=""),
+                    SectionElementConfig(
+                        key="估价结果和估价报告的使用",
+                        source_key="估价结果说明",
+                        required=False,
+                        default_value="",
+                    ),
                 ],
             ),
             ContentItemConfig(
@@ -128,6 +145,11 @@ LAND_SECTIONS = [
                     SectionElementConfig(key="估价机构"),
                     SectionElementConfig(key="报告完成日期", options={"transform": "cn_date"}),
                 ],
+            ),
+            ContentItemConfig(
+                key="附件",
+                template_file="land/attachments/_template.md",
+                elements=[],
             ),
         ],
     ),

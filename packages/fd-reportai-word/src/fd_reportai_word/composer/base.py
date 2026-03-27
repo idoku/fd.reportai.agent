@@ -342,7 +342,7 @@ class DefaultComposer:
                 value = self._apply_transform(value, transform, data_context)
             return value
 
-        if computed_field.mode not in {"llm_text", "llm_json"}:
+        if computed_field.mode not in {"llm_text", "llm_json", "llm_table"}:
             raise ValueError(f"Unsupported computed field mode: {computed_field.mode}.")
 
         llm = self._resolve_llm()
@@ -358,10 +358,15 @@ class DefaultComposer:
             _SafeFormatDict(
                 {
                     "input": json.dumps(variables, ensure_ascii=False, indent=2),
+                    "template": computed_field.template or "",
                 }
             )
         )
-        response = llm.invoke([HumanMessage(content=prompt)])
+        invoke_kwargs: dict[str, object] = {}
+        max_tokens = computed_field.options.get("max_tokens")
+        if isinstance(max_tokens, int) and max_tokens > 0:
+            invoke_kwargs["max_tokens"] = max_tokens
+        response = llm.invoke([HumanMessage(content=prompt)], **invoke_kwargs)
         response_text = self._extract_content(response)
         if data_context.metadata.get("model_version") is None:
             data_context.metadata["model_version"] = self._extract_model_name(response)

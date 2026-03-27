@@ -44,6 +44,18 @@ LAND_COMPUTED_FIELDS = [
         ],
     ),
     ComputedFieldConfig(
+        key="土地登记状况",
+        mode="llm_table",
+        prompt_file="land/computed/土地登记状况.prompt.txt",
+        template_file="land/object_definition/3.object.table.template.md",
+        input_blocks=[
+            SectionElementConfig(key="估价对象", required=True),
+        ],
+        options={
+            "max_tokens": 1200,
+        },
+    ),
+    ComputedFieldConfig(
         key="地价定义分项设定",
         mode="llm_json",
         prompt_file="land/computed/地价定义分项设定.prompt.txt",

@@ -59,6 +59,7 @@ LAND_SECTIONS = [
                     SectionElementConfig(key="委托估价方联系人", source_key="联系人"),
                     SectionElementConfig(key="委托估价方联系方式", source_key="联系方式"),
                     SectionElementConfig(key="委托方与权利人关系"),
+                    SectionElementConfig(key="土地登记状况", required=False),
                     SectionElementConfig(key="估价对象界定"),
                     SectionElementConfig(key="估价期日", aliases=["查勘完成日期"], options={"transform": "cn_date"}),
                     SectionElementConfig(key="用途设定"),

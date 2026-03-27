@@ -47,6 +47,7 @@ class ComputedFieldDefinition:
     key: str
     mode: str
     prompt_template: str | None = None
+    template: str | None = None
     input_blocks: list[DefinitionInput] = field(default_factory=list)
     options: dict[str, Any] = field(default_factory=dict)
 

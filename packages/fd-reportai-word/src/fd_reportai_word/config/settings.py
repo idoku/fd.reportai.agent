@@ -84,14 +84,22 @@ class ComputedFieldConfig:
     mode: str
     prompt: str | None = None
     prompt_file: str | None = None
+    template: str | None = None
+    template_file: str | None = None
     input_blocks: list[SectionElementConfig] = field(default_factory=list)
     options: dict[str, Any] = field(default_factory=dict)
 
-    def to_definition(self, *, prompts_dir: Path | None = None) -> ComputedFieldDefinition:
+    def to_definition(
+        self,
+        *,
+        prompts_dir: Path | None = None,
+        templates_dir: Path | None = None,
+    ) -> ComputedFieldDefinition:
         return ComputedFieldDefinition(
             key=self.key,
             mode=self.mode,
             prompt_template=self._resolve_prompt(prompts_dir),
+            template=self._resolve_template(templates_dir),
             input_blocks=list(self.input_blocks),
             options=dict(self.options),
         )
@@ -106,6 +114,18 @@ class ComputedFieldConfig:
         return _load_text_with_includes(
             base_dir=prompts_dir,
             relative_path=self.prompt_file,
+        )
+
+    def _resolve_template(self, templates_dir: Path | None) -> str | None:
+        if self.template is not None:
+            return self.template
+        if self.template_file is None:
+            return None
+        if templates_dir is None:
+            raise ValueError(f"templates_dir is required for template_file={self.template_file!r}.")
+        return _load_text_with_includes(
+            base_dir=templates_dir,
+            relative_path=self.template_file,
         )
 
 
@@ -213,7 +233,7 @@ class WordPipelineConfig:
             version=self.version,
             title=self.title,
             computed_fields=[
-                field_config.to_definition(prompts_dir=prompts_dir)
+                field_config.to_definition(prompts_dir=prompts_dir, templates_dir=templates_dir)
                 for field_config in self.computed_fields
             ],
             sections=[

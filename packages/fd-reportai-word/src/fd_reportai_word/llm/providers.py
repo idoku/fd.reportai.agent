@@ -89,13 +89,16 @@ def _build_qwen(config: LlmProviderConfig) -> SupportsInvoke:
 
 
 def _build_doubao(config: LlmProviderConfig) -> SupportsInvoke:
+    model_name = config.model or env_str("DOUBAO_MODEL_NAME")
+    if not model_name:
+        raise RuntimeError("DOUBAO_MODEL_NAME is required for Doubao provider.")
     return _build_chat_openai(
         LlmProviderConfig(
             provider="doubao",
-            model=config.model or env_str("DOUBAO_MODEL_NAME", "ark-code-latest"),
+            model=model_name,
             temperature=config.temperature or env_float("TEMPERATURE", 0.3),
             api_key=config.api_key or env_str("DOUBAO_MODEL_KEY"),
-            base_url=config.base_url or env_str("DOUBAO_MODEL_URL", "https://ark.cn-beijing.volces.com/api/coding/v3"),
+            base_url=config.base_url or env_str("DOUBAO_MODEL_URL", "https://ark.cn-beijing.volces.com/api/v3"),
             extra=config.extra,
         )
     )

@@ -23,14 +23,20 @@ LAND_SECTIONS = [
         block_mode="template_fill",
         template_file="land/summary/_template.md",
         elements=[
-            SectionElementConfig(key="项目名称"),
             SectionElementConfig(key="估价期日", aliases=["查勘完成日期"], options={"transform": "cn_date"}),
             SectionElementConfig(key="估价日期", aliases=["报告完成日期"], options={"transform": "cn_date"}),
         ],
         content_items=[
             ContentItemConfig(
+                key="project_name_item",
+                template_file="land/summary/1.project_name.template.md",
+                elements=[
+                    SectionElementConfig(key="项目名称"),
+                ],
+            ),
+            ContentItemConfig(
                 key="委托估价方",
-                template_file="land/summary/1.client.template.md",
+                template_file="land/summary/2.client.template.md",
                 elements=[
                     SectionElementConfig(key="委托估价方", source_key="委托方", aliases=["委托方名称"]),
                     SectionElementConfig(key="委托估价方联系人", source_key="联系人"),
@@ -40,14 +46,14 @@ LAND_SECTIONS = [
             ),
             ContentItemConfig(
                 key="估价目的",
-                template_file="land/summary/2.purpose.template.md",
+                template_file="land/summary/3.purpose.template.md",
                 elements=[
                     SectionElementConfig(key="估价目的描述"),
                 ],
             ),
             ContentItemConfig(
                 key="地价定义",
-                template_file="land/summary/3.value.template.md",
+                template_file="land/summary/4.value.template.md",
                 elements=[
                     SectionElementConfig(key="估价对象界定"),
                     SectionElementConfig(key="估价期日", aliases=["查勘完成日期"], options={"transform": "cn_date"}),
@@ -63,7 +69,7 @@ LAND_SECTIONS = [
             ),
             ContentItemConfig(
                 key="估价结果",
-                template_file="land/summary/4.result.template.md",
+                template_file="land/summary/5.result.template.md",
                 elements=[
                     SectionElementConfig(key="估价结果描述"),
                     SectionElementConfig(key="估价结果说明"),
@@ -71,14 +77,14 @@ LAND_SECTIONS = [
             ),
             ContentItemConfig(
                 key="估价师签字",
-                template_file="land/summary/5.signatures.template.md",
+                template_file="land/summary/6.signatures.template.md",
                 elements=[
                     SectionElementConfig(key="估价师签字"),
                 ],
             ),
             ContentItemConfig(
                 key="土地估价机构",
-                template_file="land/summary/6.agency.template.md",
+                template_file="land/summary/7.agency.template.md",
                 elements=[
                     SectionElementConfig(
                         key="估价机构法定代表人签字",
@@ -91,7 +97,7 @@ LAND_SECTIONS = [
             ),
             ContentItemConfig(
                 key="结果一览表",
-                template_file="land/summary/7.table.template.md",
+                template_file="land/summary/8.table.template.md",
                 elements=[
                     SectionElementConfig(key="估价机构", aliases=["土地估价机构"]),
                     SectionElementConfig(key="估价报告编号", source_key="报告编号"),
@@ -120,9 +126,7 @@ LAND_SECTIONS = [
                         options={"transform": "numbered_paragraphs"},
                     ),
                     SectionElementConfig(key="估价机构"),
-                    SectionElementConfig(key="报告完成日期",
-                        options={"transform": "cn_date"},
-                    ),
+                    SectionElementConfig(key="报告完成日期", options={"transform": "cn_date"}),
                 ],
             ),
         ],

@@ -12,8 +12,14 @@ def apply_transform(value: object | None, transform: object, metadata: dict[str,
         return to_chinese_date(str(value))
     if transform == "markdown_image":
         return to_markdown_image(str(value), metadata)
+    if transform == "markdown_file_content":
+        return to_markdown_file_content(str(value), metadata)
+    if transform == "markdown_or_numbered_text":
+        return to_markdown_or_numbered_text(value, metadata)
     if transform == "numbered_paragraphs":
         return to_numbered_paragraphs(value)
+    if transform == "attachment_list":
+        return to_attachment_list(value)
     if transform == "land_result_org_info":
         return to_land_result_org_info(value)
     if transform == "land_result_purpose_rights":
@@ -54,16 +60,55 @@ def to_markdown_image(value: str, metadata: dict[str, Any]) -> str:
     return f"![法定代表人签字](<{resolved_path}>)"
 
 
+def to_markdown_file_content(value: str, metadata: dict[str, Any]) -> str:
+    candidate = value.strip()
+    if not candidate:
+        return ""
+    resolved_path = resolve_input_path(candidate, metadata)
+    if resolved_path is None or resolved_path.suffix.lower() != ".md" or not resolved_path.is_file():
+        return candidate
+    return resolved_path.read_text(encoding="utf-8").strip()
+
+
+def to_markdown_or_numbered_text(value: object, metadata: dict[str, Any]) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        candidate = value.strip()
+        if not candidate:
+            return ""
+        resolved_path = resolve_input_path(candidate, metadata)
+        if resolved_path is not None and resolved_path.suffix.lower() == ".md" and resolved_path.is_file():
+            return resolved_path.read_text(encoding="utf-8").strip()
+        return candidate
+    if isinstance(value, list):
+        lines: list[str] = []
+        for index, item in enumerate(value, start=1):
+            item_text = stringify(item, default="").strip()
+            if not item_text:
+                continue
+            lines.append(f"{index}. {item_text}")
+        return "\n".join(lines)
+    return stringify(value, default="")
+
+
 def resolve_media_path(value: str, metadata: dict[str, Any]) -> str:
+    resolved = resolve_input_path(value, metadata)
+    if resolved is not None:
+        return resolved.as_posix()
+    return value
+
+
+def resolve_input_path(value: str, metadata: dict[str, Any]) -> Path | None:
     if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", value):
-        return value
+        return None
     candidate = Path(value)
     if candidate.is_absolute():
-        return candidate.as_posix()
+        return candidate
     input_base_dir = metadata.get("input_base_dir")
     if isinstance(input_base_dir, str) and input_base_dir.strip():
-        return (Path(input_base_dir) / candidate).resolve().as_posix()
-    return candidate.as_posix()
+        return (Path(input_base_dir) / candidate).resolve()
+    return candidate.resolve()
 
 
 def to_numbered_paragraphs(value: object) -> str:
@@ -77,6 +122,25 @@ def to_numbered_paragraphs(value: object) -> str:
         if not item_text:
             continue
         lines.append(f"\t{index}、{item_text}")
+    return "\n".join(lines)
+
+
+def to_attachment_list(value: object) -> str:
+    if not isinstance(value, list):
+        return stringify(value, default="")
+    lines: list[str] = []
+    for index, item in enumerate(value, start=1):
+        if isinstance(item, dict):
+            number = stringify(item.get("序号"), default=str(index))
+            name = stringify(item.get("名称"), default="")
+            if not name:
+                continue
+            lines.append(f"{number}. {name}")
+            continue
+        item_text = stringify(item, default="").strip()
+        if not item_text:
+            continue
+        lines.append(f"{index}. {item_text}")
     return "\n".join(lines)
 
 

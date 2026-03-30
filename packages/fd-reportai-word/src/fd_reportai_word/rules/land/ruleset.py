@@ -38,13 +38,28 @@ def _object_definition_section() -> ReportSectionConfig:
             SectionElementConfig(key="估价对象界定"),
             SectionElementConfig(key="土地登记状况描述", required=False),
             SectionElementConfig(key="不动产权证书", required=False),
+            SectionElementConfig(key="土地权利状况", required=False),
+            SectionElementConfig(key="土地利用状况", required=False),
             SectionElementConfig(key="估价期日", aliases=["查勘完成日期"], options={"transform": "cn_date"}),
             SectionElementConfig(key="用途设定"),
             SectionElementConfig(key="权利类型设定"),
             SectionElementConfig(key="年限设定"),
+            SectionElementConfig(
+                key="一般因素",
+                required=False,
+                default_value="",
+                options={"transform": "markdown_file_content"},
+            ),
+            SectionElementConfig(
+                key="区域因素",
+                required=False,
+                default_value="",
+                options={"transform": "markdown_file_content"},
+            ),
             SectionElementConfig(key="利用条件设定"),
             SectionElementConfig(key="开发程度设定"),
             SectionElementConfig(key="他项权利设定"),
+            SectionElementConfig(key="个别因素说明", required=False),
             SectionElementConfig(key="价格内涵总结"),
         ],
     )
@@ -57,13 +72,70 @@ def _result_usage_section() -> ReportSectionConfig:
         block_mode="template_fill",
         template_file="land/result_usage/_template.md",
         elements=[
-            SectionElementConfig(key="估价依据", required=False, default_value=""),
-            SectionElementConfig(key="土地估价", source_key="估价结果描述", required=False, default_value=""),
             SectionElementConfig(
-                key="估价结果和估价报告的使用",
-                source_key="估价结果说明",
+                key="国家法律法规",
                 required=False,
                 default_value="",
+                options={"transform": "markdown_file_content"},
+            ),
+            SectionElementConfig(
+                key="地方法律法规",
+                required=False,
+                default_value="",
+                options={"transform": "markdown_file_content"},
+            ),
+            SectionElementConfig(
+                key="有关技术标准",
+                required=False,
+                default_value="",
+                options={"transform": "markdown_file_content"},
+            ),
+            SectionElementConfig(
+                key="委托方资料",
+                required=False,
+            ),
+            SectionElementConfig(
+                key="现场查勘资料",
+                required=False,
+            ),
+            SectionElementConfig(
+                key="估价原则",
+                required=False,
+                default_value="",
+                options={"transform": "markdown_file_content"},
+            ),
+            SectionElementConfig(
+                key="方法选择",
+                required=False,
+            ),
+            SectionElementConfig(
+                key="估价结果",
+                source_key="估价结果描述",
+                aliases=["估价结果描述"],
+                required=False,
+            ),
+            SectionElementConfig(
+                key="前提条件",
+                required=False,
+            ),
+            SectionElementConfig(
+                key="报告的使用",
+                source_key="报告的使用",
+                aliases=["估价结果和估价报告的使用", "估价结果说明"],
+                required=False,
+                default_value="",
+                options={"transform": "markdown_file_content"},
+            ),
+            SectionElementConfig(
+                key="特殊事项说明",
+                required=False,
+            ),
+            SectionElementConfig(
+                key="变现能力分析",
+                source_key="变现能力分析",
+                required=False,
+                default_value="",
+                options={"transform": "markdown_file_content"},
             ),
         ],
     )
@@ -75,7 +147,23 @@ def _attachments_section() -> ReportSectionConfig:
         title="附件",
         block_mode="template_fill",
         template_file="land/attachments/_template.md",
-        elements=[],
+        elements=[
+            SectionElementConfig(
+                key="附件清单正文",
+                source_key="附件清单",
+                required=False,
+                default_value=[
+                    "估价对象《不动产权证书》",
+                    "估价对象《国有建设用地使用权出让合同》",
+                    "估价对象《缴款凭证》",
+                    "估价对象位置图",
+                    "估价对象现状照片",
+                    "土地估价机构《营业执照》",
+                    "土地估价机构《土地备案证书》",
+                ],
+                options={"transform": "attachment_list"},
+            ),
+        ],
     )
 
 

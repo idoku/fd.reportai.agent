@@ -36,7 +36,7 @@ def _build_context(payload: dict[str, object], ruleset_name: str) -> WordContext
 def main() -> None:
     load_dotenv_if_available(ROOT)
 
-    input_path = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "inputs" / "land_summary_input.json"
+    input_path = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "inputs" / "land_input.json"
     output_path = Path(sys.argv[2]) if len(sys.argv) > 2 else ROOT / "inputs" / "_outputs" / "report.md"
     ruleset_name = sys.argv[3] if len(sys.argv) > 3 else "ruleset_land"
 

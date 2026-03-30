@@ -8,6 +8,7 @@ LAND_COMPUTED_FIELDS = [
         key="项目名称",
         mode="llm_text",
         prompt_file="land/computed/项目名称.prompt.txt",
+        examples_file="land/computed/项目名称.examples.json",
         input_blocks=[
             SectionElementConfig(key="项目信息", required=True),
             SectionElementConfig(key="估价对象", required=True),

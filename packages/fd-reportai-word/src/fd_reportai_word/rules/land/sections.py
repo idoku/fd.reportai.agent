@@ -28,7 +28,7 @@ LAND_SECTIONS = [
         ],
         content_items=[
             ContentItemConfig(
-                key="project_name_item",
+                key="项目名称",
                 template_file="land/summary/1.project_name.template.md",
                 elements=[
                     SectionElementConfig(key="项目名称"),
@@ -53,7 +53,7 @@ LAND_SECTIONS = [
             ),
             ContentItemConfig(
                 key="地价定义",
-                template_file="land/object_definition/_template.md",
+                template_file="land/summary/4.definition.template.md",
                 elements=[
                     SectionElementConfig(key="委托估价方", source_key="委托方", aliases=["委托方名称"]),
                     SectionElementConfig(key="委托估价方联系人", source_key="联系人"),

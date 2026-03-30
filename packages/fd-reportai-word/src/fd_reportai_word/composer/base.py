@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 import json
 
 from langchain_core.messages import HumanMessage
+from langchain_core.prompts import FewShotPromptTemplate, PromptTemplate
 
 from ..assembler import DefaultAssembler
 from ..blocker.base import DefaultBlocker
@@ -166,11 +167,13 @@ class DefaultComposer:
         return ValidationResult(is_valid=not issues, issues=issues)
 
     def _build_ai_prompt(self, task: BlockTask, variables: dict[str, object]) -> str:
-        prompt_template = task.definition.prompt_template or ""
-        prompt_variables = {
-            "input": json.dumps(variables, ensure_ascii=False, indent=2),
-        }
-        return prompt_template.format_map(_SafeFormatDict(prompt_variables))
+        return self._render_prompt_template(
+            prompt_template=task.definition.prompt_template or "",
+            prompt_variables={
+                "input": json.dumps(variables, ensure_ascii=False, indent=2),
+            },
+            few_shots=task.definition.few_shots,
+        )
 
     def _build_content_item_values(
         self,
@@ -189,12 +192,12 @@ class DefaultComposer:
     ) -> str:
         variables = self._resolve_content_item_variables(content_item.inputs, data_context)
         if content_item.prompt_template:
-            prompt = content_item.prompt_template.format_map(
-                _SafeFormatDict(
-                    {
-                        "input": json.dumps(variables, ensure_ascii=False, indent=2),
-                    }
-                )
+            prompt = self._render_prompt_template(
+                prompt_template=content_item.prompt_template,
+                prompt_variables={
+                    "input": json.dumps(variables, ensure_ascii=False, indent=2),
+                },
+                few_shots=content_item.few_shots,
             )
             llm = self._resolve_llm()
             if llm is None:
@@ -354,13 +357,13 @@ class DefaultComposer:
             variables = self._get_computed_field_input_blocks(computed_field, data_context)
         else:
             variables = {key: element.value for key, element in data_context.values.items()}
-        prompt = prompt_template.format_map(
-            _SafeFormatDict(
-                {
-                    "input": json.dumps(variables, ensure_ascii=False, indent=2),
-                    "template": computed_field.template or "",
-                }
-            )
+        prompt = self._render_prompt_template(
+            prompt_template=prompt_template,
+            prompt_variables={
+                "input": json.dumps(variables, ensure_ascii=False, indent=2),
+                "template": computed_field.template or "",
+            },
+            few_shots=computed_field.few_shots,
         )
         invoke_kwargs: dict[str, object] = {}
         max_tokens = computed_field.options.get("max_tokens")
@@ -449,6 +452,65 @@ class DefaultComposer:
             candidate = candidate.split("\n", 1)[1]
             candidate = candidate.rsplit("```", 1)[0].strip()
         return candidate.strip().strip('"').strip("'")
+
+    def _render_prompt_template(
+        self,
+        *,
+        prompt_template: str,
+        prompt_variables: dict[str, object],
+        few_shots: list[dict[str, str]] | None = None,
+    ) -> str:
+        if "{examples}" not in prompt_template:
+            return prompt_template.format_map(_SafeFormatDict(prompt_variables))
+
+        prefix, suffix = prompt_template.split("{examples}", 1)
+        examples = [
+            {"example": self._serialize_few_shot_example(example)}
+            for example in (few_shots or [])
+        ]
+        few_shot_prompt = FewShotPromptTemplate(
+            examples=examples,
+            example_prompt=PromptTemplate.from_template("{example}"),
+            prefix=prefix.rstrip(),
+            suffix=suffix.lstrip(),
+            input_variables=list(prompt_variables.keys()),
+            example_separator="\n\n",
+        )
+        return few_shot_prompt.format(**prompt_variables)
+
+    def _serialize_few_shot_example(self, example: dict[str, object]) -> str:
+        normalized = {
+            key: self._coerce_example_value(value, key=key)
+            for key, value in example.items()
+        }
+        if "input_data" in normalized or "standard_output" in normalized:
+            parts: list[str] = []
+            if "input_data" in normalized:
+                parts.append("【示例输入】")
+                parts.append(normalized["input_data"].strip())
+            if "standard_output" in normalized:
+                parts.append("【标准输出】")
+                parts.append(normalized["standard_output"].strip())
+            for key, value in normalized.items():
+                if key in {"input_data", "standard_output"}:
+                    continue
+                parts.append(f"【{key}】")
+                parts.append(value.strip())
+            return "\n".join(part for part in parts if part).strip()
+
+        lines: list[str] = []
+        for key, value in normalized.items():
+            lines.append(f"{key}:")
+            lines.append(value)
+        return "\n".join(lines).strip()
+
+    def _coerce_example_value(self, value: object, *, key: str) -> str:
+        if isinstance(value, list):
+            separator = "\n\n" if key == "output" else "\n"
+            return separator.join(str(item).rstrip() for item in value).strip()
+        if isinstance(value, str):
+            return value
+        return str(value)
 
     def _resolve_llm(self) -> SupportsInvoke | None:
         if self.locator is not None:

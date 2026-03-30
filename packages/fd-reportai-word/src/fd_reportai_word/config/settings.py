@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import ast
 from dataclasses import dataclass, field
+import json
 from pathlib import Path
 import re
 from typing import Any
@@ -21,6 +23,7 @@ PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_RULES_DIR = PACKAGE_ROOT / "rules"
 DEFAULT_TEMPLATES_DIR = PACKAGE_ROOT / "templates"
 DEFAULT_PROMPTS_DIR = PACKAGE_ROOT / "prompts"
+DEFAULT_EXAMPLES_DIR = PACKAGE_ROOT / "examples"
 _INCLUDE_PATTERN = re.compile(r"\{\{\s*include\s*:\s*([^}]+?)\s*\}\}")
 
 
@@ -36,6 +39,8 @@ class ContentItemConfig:
     template_file: str | None = None
     prompt: str | None = None
     prompt_file: str | None = None
+    few_shots: list[dict[str, str]] = field(default_factory=list)
+    examples_file: str | None = None
     elements: list[SectionElementConfig] = field(default_factory=list)
     options: dict[str, Any] = field(default_factory=dict)
 
@@ -44,11 +49,13 @@ class ContentItemConfig:
         *,
         templates_dir: Path | None = None,
         prompts_dir: Path | None = None,
+        examples_dir: Path | None = None,
     ) -> ContentItemDefinition:
         return ContentItemDefinition(
             key=self.key,
             template=self._resolve_template(templates_dir),
             prompt_template=self._resolve_prompt(prompts_dir),
+            few_shots=self._resolve_examples(examples_dir),
             inputs=list(self.elements),
             options=dict(self.options),
         )
@@ -77,6 +84,16 @@ class ContentItemConfig:
             relative_path=self.prompt_file,
         )
 
+    def _resolve_examples(self, examples_dir: Path | None) -> list[dict[str, str]]:
+        if self.examples_file is None:
+            return list(self.few_shots)
+        if examples_dir is None:
+            raise ValueError(f"examples_dir is required for examples_file={self.examples_file!r}.")
+        return _load_examples(
+            base_dir=examples_dir,
+            relative_path=self.examples_file,
+        )
+
 
 @dataclass(slots=True)
 class ComputedFieldConfig:
@@ -86,6 +103,8 @@ class ComputedFieldConfig:
     prompt_file: str | None = None
     template: str | None = None
     template_file: str | None = None
+    few_shots: list[dict[str, str]] = field(default_factory=list)
+    examples_file: str | None = None
     input_blocks: list[SectionElementConfig] = field(default_factory=list)
     options: dict[str, Any] = field(default_factory=dict)
 
@@ -94,12 +113,14 @@ class ComputedFieldConfig:
         *,
         prompts_dir: Path | None = None,
         templates_dir: Path | None = None,
+        examples_dir: Path | None = None,
     ) -> ComputedFieldDefinition:
         return ComputedFieldDefinition(
             key=self.key,
             mode=self.mode,
             prompt_template=self._resolve_prompt(prompts_dir),
             template=self._resolve_template(templates_dir),
+            few_shots=self._resolve_examples(examples_dir),
             input_blocks=list(self.input_blocks),
             options=dict(self.options),
         )
@@ -128,6 +149,16 @@ class ComputedFieldConfig:
             relative_path=self.template_file,
         )
 
+    def _resolve_examples(self, examples_dir: Path | None) -> list[dict[str, str]]:
+        if self.examples_file is None:
+            return list(self.few_shots)
+        if examples_dir is None:
+            raise ValueError(f"examples_dir is required for examples_file={self.examples_file!r}.")
+        return _load_examples(
+            base_dir=examples_dir,
+            relative_path=self.examples_file,
+        )
+
 
 @dataclass(slots=True)
 class ReportSectionConfig:
@@ -139,6 +170,7 @@ class ReportSectionConfig:
     prompt: str | None = None
     prompt_file: str | None = None
     few_shots: list[dict[str, str]] = field(default_factory=list)
+    examples_file: str | None = None
     elements: list[SectionElementConfig] = field(default_factory=list)
     content_items: list[ContentItemConfig] = field(default_factory=list)
     children: list["ReportSectionConfig"] = field(default_factory=list)
@@ -151,6 +183,7 @@ class ReportSectionConfig:
         *,
         templates_dir: Path | None = None,
         prompts_dir: Path | None = None,
+        examples_dir: Path | None = None,
     ) -> SectionDefinition:
         generator_mode = {
             "template_fill": "template",
@@ -164,10 +197,14 @@ class ReportSectionConfig:
             generator_mode=generator_mode,
             template=self._resolve_template(templates_dir),
             prompt_template=self._resolve_prompt(prompts_dir),
-            few_shots=list(self.few_shots),
+            few_shots=self._resolve_examples(examples_dir),
             inputs=list(self.elements),
             content_items=[
-                content_item.to_definition(templates_dir=templates_dir, prompts_dir=prompts_dir)
+                content_item.to_definition(
+                    templates_dir=templates_dir,
+                    prompts_dir=prompts_dir,
+                    examples_dir=examples_dir,
+                )
                 for content_item in self.content_items
             ],
             compute_key=self.compute_key,
@@ -178,7 +215,11 @@ class ReportSectionConfig:
             title=self.title,
             blocks=[block],
             children=[
-                child.to_section_definition(templates_dir=templates_dir, prompts_dir=prompts_dir)
+                child.to_section_definition(
+                    templates_dir=templates_dir,
+                    prompts_dir=prompts_dir,
+                    examples_dir=examples_dir,
+                )
                 for child in self.children
             ],
             options=dict(self.options),
@@ -208,6 +249,16 @@ class ReportSectionConfig:
             relative_path=self.prompt_file,
         )
 
+    def _resolve_examples(self, examples_dir: Path | None) -> list[dict[str, str]]:
+        if self.examples_file is None:
+            return list(self.few_shots)
+        if examples_dir is None:
+            raise ValueError(f"examples_dir is required for examples_file={self.examples_file!r}.")
+        return _load_examples(
+            base_dir=examples_dir,
+            relative_path=self.examples_file,
+        )
+
 
 @dataclass(slots=True)
 class WordPipelineConfig:
@@ -220,6 +271,7 @@ class WordPipelineConfig:
     rules_dir: str | Path | None = DEFAULT_RULES_DIR
     templates_dir: str | Path | None = None
     prompts_dir: str | Path | None = None
+    examples_dir: str | Path | None = None
 
     def to_report_template(self) -> ReportTemplate:
         templates_dir = (
@@ -228,16 +280,27 @@ class WordPipelineConfig:
         prompts_dir = (
             Path(self.prompts_dir) if self.prompts_dir is not None else DEFAULT_PROMPTS_DIR
         )
+        examples_dir = (
+            Path(self.examples_dir) if self.examples_dir is not None else DEFAULT_EXAMPLES_DIR
+        )
         return ReportTemplate(
             key=self.name,
             version=self.version,
             title=self.title,
             computed_fields=[
-                field_config.to_definition(prompts_dir=prompts_dir, templates_dir=templates_dir)
+                field_config.to_definition(
+                    prompts_dir=prompts_dir,
+                    templates_dir=templates_dir,
+                    examples_dir=examples_dir,
+                )
                 for field_config in self.computed_fields
             ],
             sections=[
-                section.to_section_definition(templates_dir=templates_dir, prompts_dir=prompts_dir)
+                section.to_section_definition(
+                    templates_dir=templates_dir,
+                    prompts_dir=prompts_dir,
+                    examples_dir=examples_dir,
+                )
                 for section in self.sections
             ],
             options=dict(self.options),
@@ -267,3 +330,57 @@ def _load_text_with_includes(
         )
 
     return _INCLUDE_PATTERN.sub(replace_include, content)
+
+
+def _load_examples(*, base_dir: Path, relative_path: str) -> list[dict[str, str]]:
+    file_path = (base_dir / relative_path).resolve()
+    suffix = file_path.suffix.lower()
+    if suffix == ".json":
+        raw = json.loads(file_path.read_text(encoding="utf-8"))
+        if not isinstance(raw, list):
+            raise ValueError(f"Examples file must contain a list: {file_path}")
+        return [_normalize_example_item(item, file_path) for item in raw]
+    if suffix == ".py":
+        return _load_python_examples(file_path)
+    raise ValueError(f"Unsupported examples file format: {file_path}")
+
+
+def _load_python_examples(file_path: Path) -> list[dict[str, str]]:
+    module = ast.parse(file_path.read_text(encoding="utf-8"), filename=str(file_path))
+    examples: list[dict[str, str]] = []
+    for node in module.body:
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+            continue
+        target = node.targets[0]
+        if not isinstance(target, ast.Name):
+            continue
+        name = target.id
+        value = ast.literal_eval(node.value)
+        if name == "examples":
+            if not isinstance(value, list):
+                raise ValueError(f"'examples' must be a list in {file_path}")
+            examples.extend(_normalize_example_item(item, file_path) for item in value)
+            continue
+        if name.startswith("example_"):
+            examples.append(_normalize_example_item(value, file_path))
+    return examples
+
+
+def _normalize_example_item(value: object, file_path: Path) -> dict[str, str]:
+    if not isinstance(value, dict):
+        raise ValueError(f"Example item must be a dict in {file_path}")
+    normalized: dict[str, str] = {}
+    for key, item in value.items():
+        normalized[str(key)] = _normalize_example_value(item, key=str(key), file_path=file_path)
+    return normalized
+
+
+def _normalize_example_value(value: object, *, key: str, file_path: Path) -> str:
+    if isinstance(value, list):
+        if not all(isinstance(item, str) for item in value):
+            raise ValueError(f"Example field '{key}' must be a string or list[str] in {file_path}")
+        separator = "\n\n" if key == "output" else "\n"
+        return separator.join(item.rstrip() for item in value).strip()
+    if isinstance(value, str):
+        return value
+    return str(value)

@@ -38,6 +38,7 @@ class ContentItemDefinition:
     key: str
     template: str | None = None
     prompt_template: str | None = None
+    few_shots: list[dict[str, str]] = field(default_factory=list)
     inputs: list[DefinitionInput] = field(default_factory=list)
     options: dict[str, Any] = field(default_factory=dict)
 
@@ -48,6 +49,7 @@ class ComputedFieldDefinition:
     mode: str
     prompt_template: str | None = None
     template: str | None = None
+    few_shots: list[dict[str, str]] = field(default_factory=list)
     input_blocks: list[DefinitionInput] = field(default_factory=list)
     options: dict[str, Any] = field(default_factory=dict)
 

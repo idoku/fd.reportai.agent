@@ -24,7 +24,7 @@ LAND_SECTIONS = [
         template_file="land/summary/_template.md",
         elements=[
             SectionElementConfig(key="估价期日", aliases=["查勘完成日期"], options={"transform": "cn_date"}),
-            SectionElementConfig(key="估价日期", aliases=["报告完成日期"], options={"transform": "cn_date"}),
+            SectionElementConfig(key="估价日期", options={"transform": "cn_date_range"}),
         ],
         content_items=[
             ContentItemConfig(
@@ -55,6 +55,8 @@ LAND_SECTIONS = [
                 key="地价定义",
                 template_file="land/summary/4.definition.template.md",
                 elements=[
+                    SectionElementConfig(key="地价定义概述"),
+                    SectionElementConfig(key="估价内涵", source_key="价格内涵总结"),
                     SectionElementConfig(key="委托估价方", source_key="委托方", aliases=["委托方名称"]),
                     SectionElementConfig(key="委托估价方联系人", source_key="联系人"),
                     SectionElementConfig(key="委托估价方联系方式", source_key="联系方式"),
@@ -96,77 +98,6 @@ LAND_SECTIONS = [
                 ],
             ),
             ContentItemConfig(
-                key="土地估价结果及其使用",
-                template_file="land/result_usage/_template.md",
-                elements=[
-                    SectionElementConfig(
-                        key="国家法律法规",
-                        required=False,
-                        default_value="",
-                        options={"transform": "markdown_file_content"},
-                    ),
-                    SectionElementConfig(
-                        key="地方法律法规",
-                        required=False,
-                        default_value="",
-                        options={"transform": "markdown_file_content"},
-                    ),
-                    SectionElementConfig(
-                        key="有关技术标准",
-                        required=False,
-                        default_value="",
-                        options={"transform": "markdown_file_content"},
-                    ),
-                    SectionElementConfig(
-                        key="委托方资料",
-                        required=False,
-                    ),
-                    SectionElementConfig(
-                        key="现场查勘资料",
-                        required=False,
-                    ),
-                    SectionElementConfig(
-                        key="估价原则",
-                        required=False,
-                        default_value="",
-                        options={"transform": "markdown_file_content"},
-                    ),
-                    SectionElementConfig(
-                        key="方法选择",
-                        required=False,
-                    ),
-                    SectionElementConfig(
-                        key="估价结果",
-                        source_key="估价结果描述",
-                        aliases=["估价结果描述"],
-                        required=False,
-                    ),
-                    SectionElementConfig(
-                        key="前提条件",
-                        required=False,
-                    ),
-                    SectionElementConfig(
-                        key="报告的使用",
-                        source_key="报告的使用",
-                        aliases=["估价结果和估价报告的使用", "估价结果说明"],
-                        required=False,
-                        default_value="",
-                        options={"transform": "markdown_file_content"},
-                    ),
-                    SectionElementConfig(
-                        key="特殊事项说明",
-                        required=False,
-                    ),
-                    SectionElementConfig(
-                        key="变现能力分析",
-                        source_key="变现能力分析",
-                        required=False,
-                        default_value="",
-                        options={"transform": "markdown_file_content"},
-                    ),
-                ],
-            ),
-            ContentItemConfig(
                 key="估价师签字",
                 template_file="land/summary/6.signatures.template.md",
                 elements=[
@@ -183,7 +114,7 @@ LAND_SECTIONS = [
                         options={"transform": "markdown_image"},
                     ),
                     SectionElementConfig(key="土地估价机构", aliases=["估价机构"]),
-                    SectionElementConfig(key="估价日期", aliases=["报告完成日期"], options={"transform": "cn_date"}),
+                    SectionElementConfig(key="估价日期", aliases=["报告完成日期"], options={"transform": "cn_date_range"}),
                 ],
             ),
             ContentItemConfig(
@@ -220,26 +151,131 @@ LAND_SECTIONS = [
                     SectionElementConfig(key="报告完成日期", options={"transform": "cn_date"}),
                 ],
             ),
-            ContentItemConfig(
-                key="附件",
-                template_file="land/attachments/_template.md",
-                elements=[
-                    SectionElementConfig(
-                        key="附件清单正文",
-                        source_key="附件清单",
-                        required=False,
-                        default_value=[
-                            "估价对象《不动产权证书》",
-                            "估价对象《国有建设用地使用权出让合同》",
-                            "估价对象《缴款凭证》",
-                            "估价对象位置图",
-                            "估价对象现状照片",
-                            "土地估价机构《营业执照》",
-                            "土地估价机构《土地备案证书》",
-                        ],
-                        options={"transform": "attachment_list"},
-                    ),
+        ],
+    ),
+    ReportSectionConfig(
+        key="object_definition",
+        title="估价对象界定",
+        block_mode="template_fill",
+        template_file="land/object_definition/_template.md",
+        elements=[
+            SectionElementConfig(key="委托估价方", source_key="委托方", aliases=["委托方名称"]),
+            SectionElementConfig(key="委托估价方联系人", source_key="联系人"),
+            SectionElementConfig(key="委托估价方联系方式", source_key="联系方式"),
+            SectionElementConfig(key="委托方与权利人关系"),
+            SectionElementConfig(key="估价对象界定"),
+            SectionElementConfig(key="土地登记状况描述", required=False),
+            SectionElementConfig(key="不动产权证书", required=False),
+            SectionElementConfig(key="土地权利状况", required=False),
+            SectionElementConfig(key="土地利用状况", required=False),
+            SectionElementConfig(
+                key="一般因素",
+                required=False,
+                default_value="",
+                options={"transform": "markdown_file_content"},
+            ),
+            SectionElementConfig(
+                key="区域因素",
+                required=False,
+                default_value="",
+                options={"transform": "markdown_file_content"},
+            ),
+            SectionElementConfig(key="个别因素说明", required=False),
+        ],
+    ),
+    ReportSectionConfig(
+        key="result_usage",
+        title="土地估价结果及其使用",
+        block_mode="template_fill",
+        template_file="land/result_usage/_template.md",
+        elements=[
+            SectionElementConfig(
+                key="国家法律法规",
+                required=False,
+                default_value="",
+                options={"transform": "markdown_file_content"},
+            ),
+            SectionElementConfig(
+                key="地方法律法规",
+                required=False,
+                default_value="",
+                options={"transform": "markdown_file_content"},
+            ),
+            SectionElementConfig(
+                key="有关技术标准",
+                required=False,
+                default_value="",
+                options={"transform": "markdown_file_content"},
+            ),
+            SectionElementConfig(
+                key="委托方资料",
+                required=False,
+            ),
+            SectionElementConfig(
+                key="现场查勘资料",
+                required=False,
+            ),
+            SectionElementConfig(
+                key="估价原则",
+                required=False,
+                default_value="",
+                options={"transform": "markdown_file_content"},
+            ),
+            SectionElementConfig(
+                key="方法选择",
+                required=False,
+            ),
+            SectionElementConfig(
+                key="估价结果",
+                source_key="估价结果描述",
+                aliases=["估价结果描述"],
+                required=False,
+            ),
+            SectionElementConfig(
+                key="前提条件",
+                required=False,
+            ),
+            SectionElementConfig(
+                key="报告的使用",
+                source_key="报告的使用",
+                aliases=["估价结果和估价报告的使用", "估价结果说明"],
+                required=False,
+                default_value="",
+                options={"transform": "markdown_file_content"},
+            ),
+            SectionElementConfig(
+                key="特殊事项说明",
+                required=False,
+            ),
+            SectionElementConfig(
+                key="变现能力分析",
+                source_key="变现能力分析",
+                required=False,
+                default_value="",
+                options={"transform": "markdown_file_content"},
+            ),
+        ],
+    ),
+    ReportSectionConfig(
+        key="attachments",
+        title="附件",
+        block_mode="template_fill",
+        template_file="land/attachments/_template.md",
+        elements=[
+            SectionElementConfig(
+                key="附件清单正文",
+                source_key="附件清单",
+                required=False,
+                default_value=[
+                    "估价对象《不动产权证书》",
+                    "估价对象《国有建设用地使用权出让合同》",
+                    "估价对象《缴款凭证》",
+                    "估价对象位置图",
+                    "估价对象现状照片",
+                    "土地估价机构《营业执照》",
+                    "土地估价机构《土地备案证书》",
                 ],
+                options={"transform": "attachment_list"},
             ),
         ],
     ),

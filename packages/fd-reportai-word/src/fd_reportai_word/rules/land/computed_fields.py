@@ -47,6 +47,17 @@ LAND_COMPUTED_FIELDS = [
         ],
     ),
     ComputedFieldConfig(
+        key="地价定义概述",
+        mode="llm_text",
+        prompt_file="land/computed/地价定义概述.prompt.txt",
+        examples_file="land/computed/地价定义概述.examples.json",
+        input_blocks=[
+            SectionElementConfig(key="项目信息", required=True),
+            SectionElementConfig(key="估价对象", required=True),
+            SectionElementConfig(key="委托估价方", required=False),
+        ],
+    ),
+    ComputedFieldConfig(
         key="土地登记状况描述",
         mode="llm_text",
         prompt_file="land/computed/土地登记状况描述.prompt.txt",
@@ -111,6 +122,7 @@ LAND_COMPUTED_FIELDS = [
         key="地价定义分项设定",
         mode="llm_json",
         prompt_file="land/computed/地价定义分项设定.prompt.txt",
+        examples_file="land/computed/地价定义分项设定.examples.json",
         input_blocks=[
             SectionElementConfig(key="项目信息", required=True),
             SectionElementConfig(key="估价对象", required=True),

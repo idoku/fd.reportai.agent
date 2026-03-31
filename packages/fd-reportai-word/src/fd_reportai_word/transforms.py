@@ -10,6 +10,8 @@ def apply_transform(value: object | None, transform: object, metadata: dict[str,
         return value
     if transform == "cn_date":
         return to_chinese_date(str(value))
+    if transform == "cn_date_range":
+        return to_chinese_date_range(str(value))
     if transform == "markdown_image":
         return to_markdown_image(str(value), metadata)
     if transform == "markdown_file_content":
@@ -36,6 +38,26 @@ def to_chinese_date(value: str) -> str:
     year, month, day = match.groups()
     digits = {"0": "〇", "1": "一", "2": "二", "3": "三", "4": "四", "5": "五", "6": "六", "7": "七", "8": "八", "9": "九"}
     return f"{''.join(digits[ch] for ch in year)}年{to_chinese_number(int(month))}月{to_chinese_number(int(day))}日"
+
+
+def to_chinese_date_range(value: str) -> str:
+    candidate = value.strip()
+    if not candidate:
+        return value
+
+    single = to_chinese_date(candidate)
+    if single != candidate:
+        return single
+
+    match = re.fullmatch(
+        r"\s*(\d{4}年\d{1,2}月\d{1,2}日)\s*(?:-|~|—|–|至)\s*(\d{4}年\d{1,2}月\d{1,2}日)\s*",
+        candidate,
+    )
+    if not match:
+        return value
+
+    start, end = match.groups()
+    return f"{to_chinese_date(start)}至{to_chinese_date(end)}"
 
 
 def to_chinese_number(value: int) -> str:

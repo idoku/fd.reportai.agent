@@ -7,9 +7,8 @@ Phase 2：template_tree 由 config_loader 填充（优先真实数据，fallback
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from copy import deepcopy
 
-from app.core.mock_data import MOCK_FIELDS, MOCK_MARKDOWN
+from app.core.mock_data import MOCK_FIELDS
 
 
 @dataclass
@@ -87,15 +86,22 @@ class ReportSession:
 
 
 def init_session() -> ReportSession:
-    """创建并返回初始 ReportSession。Phase 2：template_tree 来自 config_loader。"""
-    from app.core.config_loader import load_template_nodes  # noqa: PLC0415
+    """创建并返回初始 ReportSession。Phase 3：fields 来自 element_resolver（真实字段），markdown 动态构建。"""
+    from app.core.config_loader import load_template_nodes    # noqa: PLC0415
+    from app.core.element_resolver import resolve_all_fields  # noqa: PLC0415
 
     tree = load_template_nodes()
     first_key = tree[0]["key"] if tree else None
-    return ReportSession(
+    fields = resolve_all_fields()
+
+    session = ReportSession(
         template_tree=tree,
         selected_node=first_key,
-        fields=deepcopy(MOCK_FIELDS),
-        markdown=deepcopy(MOCK_MARKDOWN),
+        fields=fields,
+        markdown={},
         chat_history=[],
     )
+    # 为所有顶层节点构建初始 markdown 预览
+    for node in tree:
+        session.rebuild_preview_from_fields(node["key"])
+    return session

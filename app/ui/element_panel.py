@@ -25,11 +25,23 @@ def render_element_panel(session: ReportSession) -> None:
     with st.form(key="element_form", border=False):
         updated: dict[str, str] = {}
         for f in fields:
-            updated[f["key"]] = st.text_input(
-                label=f["label"],
-                value=f["value"],
-                key=f"field_{session.selected_node}_{f['key']}",
-            )
+            required = f.get("required", True)
+            label = f["label"] + (" *" if required else " (可选)")
+            current_val = f["value"]
+            # 多行内容使用 text_area，单行使用 text_input
+            if "\n" in current_val or len(current_val) > 80:
+                updated[f["key"]] = st.text_area(
+                    label=label,
+                    value=current_val,
+                    key=f"field_{session.selected_node}_{f['key']}",
+                    height=100,
+                )
+            else:
+                updated[f["key"]] = st.text_input(
+                    label=label,
+                    value=current_val,
+                    key=f"field_{session.selected_node}_{f['key']}",
+                )
 
         submitted = st.form_submit_button("保存", type="primary", use_container_width=True)
         if submitted:

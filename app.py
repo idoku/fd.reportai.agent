@@ -44,7 +44,7 @@ session: ReportSession = st.session_state["report_session"]
 # --------------------------------------------------------------------------- #
 
 st.title("📄 Report Studio")
-st.caption("Phase 1 — 页面骨架（mock 数据）")
+st.caption("Phase 3 — 要素系统（真实字段映射）")
 st.divider()
 
 # --------------------------------------------------------------------------- #

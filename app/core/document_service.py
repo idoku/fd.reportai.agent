@@ -1,8 +1,9 @@
 """
-document_service.py — Phase 4：文档预览业务逻辑层。
+document_service.py — 文档预览业务逻辑层。
 
 纯 Python，不依赖 Streamlit 或 LangGraph。
-Phase 5 起：build_node_markdown 将被 fd_reportai_word 生成结果替换。
+Phase 5：新增 generate_markdown_from_pipeline()，调用 fd_reportai_word 生成 markdown
+         并写回 session.markdown，触发预览更新。
 """
 from __future__ import annotations
 
@@ -59,3 +60,17 @@ def _collect_parts(
         children = node.get("children") or []
         if children:
             _collect_parts(session, children, parts)
+
+
+def generate_markdown_from_pipeline(session: "ReportSession") -> None:
+    """
+    Phase 5：调用 fd_reportai_word pipeline（mock LLM）生成所有章节的 markdown，
+    结果写回 session.markdown，供预览区即时展示。
+    失败时静默跳过，保证页面不崩溃。
+    """
+    from app.adapters.report_adapter import generate_section_markdown  # noqa: PLC0415
+
+    generated = generate_section_markdown(session)
+    for key, md in generated.items():
+        if md:
+            session.markdown[key] = md

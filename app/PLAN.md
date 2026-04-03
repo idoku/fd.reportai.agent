@@ -5,7 +5,7 @@
 
 ## 当前执行阶段
 
-Phase 5 - fd_reportai_word 适配器
+Phase 6 - 对话能力
 
 ---
 

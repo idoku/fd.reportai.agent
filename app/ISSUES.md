@@ -24,14 +24,13 @@
 # ISSUES.md
 
 ## 🚧 Open
-- [✖][Bug] 左侧模版结构读取的内容不完整.
-- [✖][Bug] STATE.md没有写入,PHASE.md没有追加.
+- [✖][Feature] 左侧模版结构需要读取两层,按照LAND_SECTIONS配置读取.
+- [✖][Bug] 要素内容现在读取不到,检查原因.
 
 ## ⏸ Later
 
-
 ## ✅ Done
 - [√][Bug] 右侧保存数据未及时更新到中间的输出
-
+- [√][Bug] STATE.md没有写入,PHASE.md没有追加.
  
  

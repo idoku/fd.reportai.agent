@@ -5,7 +5,7 @@
 
 ## 当前执行阶段
 
-Phase 4 - 文档预览
+Phase 5 - fd_reportai_word 适配器
 
 ---
 

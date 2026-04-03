@@ -27,6 +27,9 @@ class ReportSession:
     # 节点 key → markdown 预览文本（Phase 5 起由 AI 生成替换）
     markdown: dict[str, str] = field(default_factory=dict)
 
+    # 预览模式："node"（当前节点）或 "full"（全文）
+    preview_mode: str = "node"
+
     # 聊天记录 [{role: "user"|"assistant", content: str}]
     chat_history: list[dict] = field(default_factory=list)
 

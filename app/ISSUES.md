@@ -24,13 +24,12 @@
 # ISSUES.md
 
 ## 🚧 Open
-- [✖][Feature] 左侧模版结构需要读取两层,按照LAND_SECTIONS配置读取.
-- [✖][Bug] 要素内容现在读取不到,检查原因.
 
 ## ⏸ Later
+- [?][Enhancement] 生成预览中含占位符（{xxx}），接入真实 LLM 后会消失（Phase 6 处理）
 
 ## ✅ Done
 - [√][Bug] 右侧保存数据未及时更新到中间的输出
 - [√][Bug] STATE.md没有写入,PHASE.md没有追加.
- 
- 
+- [√][Feature] 左侧模版结构需要读取两层,按照LAND_SECTIONS配置读取.
+- [√][Bug] 要素内容现在读取不到,检查原因.

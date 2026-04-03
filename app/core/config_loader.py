@@ -24,10 +24,16 @@ def load_template_nodes(ruleset_name: str = "ruleset_land") -> list[dict]:
 
 
 def _section_to_node(section) -> dict:
-    """将 ReportSectionConfig 转换为 TemplateNode dict。"""
-    children = getattr(section, "children", None) or []
+    """将 ReportSectionConfig 转换为 TemplateNode dict（两层）。"""
+    children: list[dict] = []
+    # 第一层：子章节（ReportSectionConfig.children）
+    for c in (getattr(section, "children", None) or []):
+        children.append(_section_to_node(c))
+    # 第二层：内容项（ReportSectionConfig.content_items）
+    for ci in (getattr(section, "content_items", None) or []):
+        children.append({"key": ci.key, "title": ci.key, "children": []})
     return {
         "key": section.key,
         "title": section.title,
-        "children": [_section_to_node(c) for c in children],
+        "children": children,
     }

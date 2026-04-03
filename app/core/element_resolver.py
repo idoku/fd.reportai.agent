@@ -27,7 +27,13 @@ def resolve_all_fields(ruleset_name: str = "ruleset_land") -> dict[str, list[dic
         from fd_reportai_word import get_default_ruleset  # noqa: PLC0415
 
         ruleset = get_default_ruleset(ruleset_name)
-        return {section.key: _extract_fields(section) for section in ruleset.sections}
+        result: dict[str, list[dict]] = {}
+        for section in ruleset.sections:
+            result[section.key] = _extract_fields(section)
+            # 按 content_item key 也建立索引，供第二层节点选中时使用
+            for ci in (getattr(section, "content_items", None) or []):
+                result[ci.key] = [_elem_to_field(elem) for elem in (ci.elements or [])]
+        return result
     except Exception:
         return {k: list(v) for k, v in MOCK_FIELDS.items()}
 

@@ -62,24 +62,83 @@ def generate_section_markdown(session: "ReportSession") -> dict[str, str]:
 # --------------------------------------------------------------------------- #
 
 def _extract_markdown_by_section(context: object) -> dict[str, str]:
-    """从 pipeline 结果中提取各章节的 markdown 文本。"""
-    _ensure_package_on_path()
-    from fd_reportai_word.renderer.base import DefaultRenderer  # noqa: PLC0415
-
+    """从 pipeline 渲染结果中提取各章节的 markdown 文本。"""
     result: dict[str, str] = {}
-    composed = getattr(context, "composed_document", None)
-    if composed is None:
+    rendered = getattr(context, "rendered_output", None)
+    if not isinstance(rendered, dict):
         return result
 
-    renderer = DefaultRenderer()
-    for section in composed.sections:
-        md = renderer._render_markdown_section(section, level=2)
+    for section in rendered.get("sections", []):
+        key = section.get("key", "")
+        if not key:
+            continue
+        md = _section_dict_to_markdown(section, level=2)
         if md:
-            result[section.key] = md
-            # 同步更新 content_items（子节点）的 markdown
-            for child in (section.children or []):
-                child_md = renderer._render_markdown_section(child, level=3)
-                if child_md:
-                    result[child.key] = child_md
+            result[key] = md
+        # 同步更新子节点（content_items 生成的 children）
+        for child in section.get("children") or []:
+            child_key = child.get("key", "")
+            if not child_key:
+                continue
+            child_md = _section_dict_to_markdown(child, level=3)
+            if child_md:
+                result[child_key] = child_md
 
     return result
+
+
+def _section_dict_to_markdown(section: dict, level: int) -> str:
+    """将渲染结果中的 section 字典转换为 markdown 字符串。"""
+    heading = "#" * max(level, 1) + " " + section.get("title", "")
+    parts = [heading]
+
+    for block in section.get("blocks") or []:
+        content = block.get("content")
+        md_content = _content_to_markdown(content)
+        if md_content:
+            parts.append(md_content)
+
+    for child in section.get("children") or []:
+        child_md = _section_dict_to_markdown(child, level + 1)
+        if child_md:
+            parts.append(child_md)
+
+    text = "\n\n".join(parts).strip()
+    return text if len(parts) > 1 else ""  # 只有标题行时跳过
+
+
+def _content_to_markdown(content: object) -> str:
+    """将 block content 转换为 markdown 字符串。"""
+    if isinstance(content, dict):
+        content_type = content.get("type")
+        if content_type == "rich_text":
+            return str(content.get("text", "")).strip()
+        if content_type == "table":
+            return _table_to_markdown(content)
+        if content_type == "image_group":
+            items = content.get("items", [])
+            return "\n".join(f"- {item}" for item in items) if isinstance(items, list) else str(items)
+        return str(content.get("content", "")).strip()
+    return str(content).strip() if content is not None else ""
+
+
+def _table_to_markdown(content: dict) -> str:
+    """将 table content 转换为 markdown 表格。"""
+    rows = content.get("rows", [])
+    if not isinstance(rows, list) or not rows:
+        return ""
+    if all(isinstance(row, dict) for row in rows):
+        headers = list(rows[0].keys())
+        header_row = "| " + " | ".join(str(h) for h in headers) + " |"
+        sep_row = "| " + " | ".join("---" for _ in headers) + " |"
+        data_rows = [
+            "| " + " | ".join(str(row.get(h, "")) for h in headers) + " |"
+            for row in rows
+        ]
+        return "\n".join([header_row, sep_row, *data_rows])
+    return "\n".join(
+        "| " + " | ".join(str(cell) for cell in row) + " |"
+        if isinstance(row, (list, tuple))
+        else f"- {row}"
+        for row in rows
+    )

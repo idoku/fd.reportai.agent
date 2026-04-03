@@ -25,7 +25,7 @@ def _render_nodes(session: ReportSession, nodes: list[dict], depth: int = 0) -> 
         is_selected = session.selected_node == key
 
         btn_type = "primary" if is_selected else "secondary"
-        label = f"{'　' * depth}{title}" if depth > 0 else title
+        label = f"└ {title}" if depth > 0 else title
         if st.button(label, key=f"nav_{key}", type=btn_type, use_container_width=True):
             session.selected_node = key
             st.session_state["report_session"] = session
